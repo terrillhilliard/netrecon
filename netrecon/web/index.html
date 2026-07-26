@@ -160,6 +160,10 @@
   .ev .msg{opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tg-new{color:var(--neon)} .tg-lost{color:var(--red)} .tg-sys{color:var(--neon2)} .tg-wifi{color:var(--violet)} .tg-mod{color:var(--amber)}
   .tg-arp{color:var(--red);font-weight:700}
+  .arpbanner{display:none;padding:11px 16px;border:1px solid var(--red);border-radius:10px;
+    background:rgba(255,77,109,.13);color:var(--red);font-size:12px;letter-spacing:1px;font-weight:700;
+    box-shadow:0 0 18px rgba(255,77,109,.25);animation:pulse 1.7s infinite}
+  .arpbanner.on{display:block}
   .meters{padding:12px;display:flex;flex-direction:column;gap:12px}
   .meter .top{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);letter-spacing:1px}
   .meter .top b{color:var(--neon2);font-size:14px}
@@ -400,6 +404,7 @@
 
   <!-- CONTENT -->
   <main class="content">
+    <div class="arpbanner" id="arpBanner"></div>
     <div class="topbar">
       <div style="min-width:150px">
         <div class="brand" style="font-size:12px;letter-spacing:2px">◈ RECON CONSOLE</div>
@@ -761,8 +766,12 @@ function renderEvents(ev){
     feed.appendChild(div);}
   feed.scrollTop=feed.scrollHeight; $("#evCount").textContent=evList.length;
   const arpEvs=evList.filter(e=>e.tag==="arp.alert");
-  if(arpEvs.length){const last=arpEvs[arpEvs.length-1];const key=(last.time||"")+((last.data&&last.data.hostname)||"");
-    if(key!==window.__lastArp){window.__lastArp=key;toast("⚠ ARP SPOOF DETECTED: <b>"+esc((last.data&&last.data.hostname)||"")+"</b>","err");}}
+  const bn=$("#arpBanner");
+  if(arpEvs.length){const last=arpEvs[arpEvs.length-1];const msg=(last.data&&last.data.hostname)||"";
+    if(bn){bn.innerHTML="⚠ POSSIBLE ARP SPOOFING / MITM — "+esc(msg);bn.classList.add("on");}
+    const key=(last.time||"")+msg;
+    if(key!==window.__lastArp){window.__lastArp=key;toast("⚠ ARP SPOOF DETECTED: <b>"+esc(msg)+"</b>","err");}}
+  else if(bn){bn.classList.remove("on");}
 }
 let peakTx=1,peakRx=1;
 function renderTraffic(tx,rx,pk,protos){
