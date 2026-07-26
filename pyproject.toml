@@ -1,0 +1,30 @@
+[project]
+name = "netrecon"
+version = "0.1.0"
+description = "Network reconnaissance, asset inventory & monitoring CLI."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Terrill Hilliard" }]
+keywords = ["security", "network", "recon", "port-scanner", "asset-inventory", "blue-team"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Topic :: System :: Networking :: Monitoring",
+    "Programming Language :: Python :: 3",
+]
+dependencies = ["rich>=13", "mac-vendor-lookup>=0.1.12"]
+
+[project.scripts]
+netrecon = "netrecon.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/terrillhilliard/netrecon"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["netrecon*"]
