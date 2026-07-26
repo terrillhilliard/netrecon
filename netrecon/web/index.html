@@ -752,7 +752,7 @@ function drawRadar(){
 }
 cv.addEventListener("click",e=>{const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
   let best=null,bd=16;for(const [mac,p] of blipXY){const d=Math.hypot(p.x-mx,p.y-my);if(d<bd){bd=d;best=mac;}}if(best)openHost(best);});
-resize();drawRadar();
+resize();requestAnimationFrame(drawRadar);  // defer first draw past script parse (avoids demoHosts TDZ when DEMO=true)
 
 // ================= DEMO =================
 let demoHosts=[],demoStart=Date.now(),demoEv=[],demoTx=0,demoRx=0,demoPk=0;
