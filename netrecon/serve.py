@@ -48,6 +48,10 @@ class State:
         self.stats = {"sent": 0, "received": 0, "pkts_received": 0}
         self.events: List[dict] = []
         self.started_at = time.time()
+        self.mitm = None  # active MitmSession, if any
+        self.ai_key = None
+        self.ai_model = None
+        self.db_path = None
 
     def session(self) -> dict:
         with self.lock:
@@ -153,6 +157,63 @@ def _monitor_loop(state, iface_ip, stop):
         state.add_event("sys.log", {"message": f"monitor unavailable ({e}) - run as Administrator"})
 
 
+def start_mitm(state: State, target: str) -> dict:
+    """Launch an ARP-spoof MITM against `target`, feeding capture into state."""
+    if not target:
+        return {"success": False, "error": "no target specified"}
+    if state.mitm is not None:
+        return {"success": False, "error": "MITM already running - stop it first"}
+    gw = state.gateway.get("ipv4")
+    if not gw:
+        return {"success": False, "error": "gateway unknown (rescan first)"}
+
+    from . import mitm as mitm_mod
+
+    def on_flow(src, dst, proto, dport, length):
+        with state.lock:
+            state.stats["pkts_received"] += 1
+            pn = (proto or "").upper()
+            state.protos[pn] = state.protos.get(pn, 0) + 1
+            peer = dst if src == target else src
+            t = state.traffic.setdefault(peer, {"sent": 0, "received": 0})
+            if src == target:
+                t["sent"] += length
+            else:
+                t["received"] += length
+
+    def on_dns(client, qname):
+        state.add_event("dns", {"ipv4": client, "hostname": qname})
+
+    def on_http(client, host):
+        state.add_event("http", {"ipv4": client, "hostname": host})
+
+    try:
+        sess = mitm_mod.MitmSession(target, gw, iface=None,
+                                    on_flow=on_flow, on_dns=on_dns, on_http=on_http)
+        sess.start()
+    except ImportError:
+        return {"success": False, "error": "scapy not installed (pip install scapy)"}
+    except (PermissionError, OSError) as e:
+        return {"success": False, "error": f"needs Administrator + Npcap: {e}"}
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
+
+    state.mitm = sess
+    state.add_event("sys.log", {"message": f"MITM started on {target}"})
+    return {"success": True, "note": f"MITM {target} started - see the TRAFFIC view"}
+
+
+def stop_mitm(state: State) -> dict:
+    if state.mitm is not None:
+        try:
+            state.mitm.stop()
+        except Exception:
+            pass
+        state.mitm = None
+        state.add_event("sys.log", {"message": "MITM stopped, ARP restored"})
+    return {"success": True}
+
+
 class Handler(BaseHTTPRequestHandler):
     state: Optional[State] = None
 
@@ -202,6 +263,15 @@ class Handler(BaseHTTPRequestHandler):
             with self.state.lock:
                 self._json(list(self.state.events))
             return
+        if path == "/api/alerts":
+            try:
+                con = store.connect(self.state.db_path or store.DEFAULT_DB)
+                rows = [dict(r) for r in store.recent_alerts(con, limit=100)]
+                con.close()
+                self._json(rows)
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+            return
         if path.startswith("/api/session/"):
             key = path.rsplit("/", 1)[-1]
             self._json(self.state.session().get(key, {}))
@@ -209,11 +279,42 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b"not found")
 
     def do_POST(self):
+        path = self.path.split("?")[0]
         length = int(self.headers.get("Content-Length", 0) or 0)
-        if length:
-            self.rfile.read(length)
-        # netrecon serve is read-only; acknowledge so the dashboard UI is happy.
-        self._json({"success": True, "note": "netrecon serve is read-only"})
+        body = self.rfile.read(length) if length else b""
+        if path == "/api/mitm":
+            try:
+                data = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                data = {}
+            self._json(start_mitm(self.state, data.get("target")))
+            return
+        if path == "/api/mitm/stop":
+            self._json(stop_mitm(self.state))
+            return
+        if path == "/api/ask":
+            try:
+                data = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                data = {}
+            question = (data.get("question") or "").strip()
+            if not question:
+                self._json({"error": "empty question"}, 400)
+                return
+            from . import ai
+            try:
+                with self.state.lock:
+                    events = list(self.state.events)
+                ctx = ai.build_context(self.state.session(), events)
+                answer = ai.ask(question, ctx, model=self.state.ai_model, key=self.state.ai_key)
+                self._json({"answer": answer})
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 400)
+            except Exception as e:
+                self._json({"error": f"AI request failed: {e}"}, 502)
+            return
+        # other command posts: netrecon serve is read-only.
+        self._json({"success": True, "note": "netrecon serve is read-only - use the CLI"})
 
 
 def make_handler(state: State):
@@ -221,8 +322,12 @@ def make_handler(state: State):
 
 
 def serve(host="127.0.0.1", port=8081, target=None, ports=None, timeout=0.6,
-          db_path=None, rescan=60, monitor_on=False, open_browser=True, iface=None) -> None:
+          db_path=None, rescan=60, monitor_on=False, open_browser=True, iface=None,
+          ai_key=None, ai_model=None) -> None:
     state = State()
+    state.ai_key = ai_key
+    state.ai_model = ai_model
+    state.db_path = db_path or store.DEFAULT_DB
     if iface and iface.get("ipv4"):
         state.interface = {"ipv4": iface["ipv4"], "mac": iface.get("mac") or _self_mac(),
                            "hostname": socket.gethostname()}

@@ -23,6 +23,8 @@ An optional `serve` command hosts a real-time web dashboard on top of the same e
 - **`monitor`** — passive flow + DNS capture via raw sockets (pure stdlib; needs admin).
 - **`watch`** — continuous rescans that alert on new devices / newly-opened ports (console + optional [ntfy](https://ntfy.sh) phone push).
 - **`serve`** — live web console (radar, host drill-down, port scanner, traffic telemetry) served from the netrecon engine.
+- **`mitm`** — ARP-spoof a device, forward its traffic, and capture flows / DNS / HTTP hosts (Scapy; admin).
+- **`flows` / `dns`** — view captured traffic and DNS queries.
 - **`ingest` / `alerts`** — pull Suricata `eve.json` + Zeek logs into the store and query IDS alerts (the SIEM spine).
 - **`interfaces`** — list adapters and pick which one to use; auto-prefers wired, skips VPN/virtual, switch with `--iface`.
 - **`hosts`** — the accumulated SQLite asset inventory (`first_seen` / `last_seen` / `times_seen`).
@@ -76,11 +78,12 @@ $ netrecon scan
 
 ## Web dashboard
 
-`netrecon serve` hosts a self-contained web console (sonar radar, host drill-down,
-WiFi/traffic panels, a Zenmap-style port view, and an on-device analyzer) backed
-by a bettercap-compatible REST API — so the UI runs entirely on the netrecon
-engine. It rescans on an interval and, with `--monitor`, streams live traffic and
-DNS events. Data persists to `~/.netrecon/netrecon.db`.
+`netrecon serve` hosts a self-contained **liquid-glass** web console — sonar radar,
+host drill-down with one-click **MITM**, an Nmap-style port view, live traffic
+telemetry, a **SIEM** alerts tab (from `netrecon ingest`), and an **AI ANALYSIS**
+tab that answers questions about your live network (set `ANTHROPIC_API_KEY` or
+`--ai-key`). It rescans on an interval and, with `--monitor`, streams live traffic
+and DNS events. Data persists to `~/.netrecon/netrecon.db`.
 
 ## Roadmap
 

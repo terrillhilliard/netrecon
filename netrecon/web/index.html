@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bettercap · RECON CONSOLE</title>
+<title>netrecon · RECON CONSOLE</title>
 <style>
   :root, :root[data-theme="dark"]{
     --bg:#04070a; --panel:#0a1119; --panel2:#0c141d;
@@ -276,18 +276,70 @@
   .about-links a{padding:9px 14px;border:1px solid var(--neon);color:var(--neon);border-radius:8px;text-decoration:none;font-size:12px;letter-spacing:1px}
   .about-links a:hover{background:var(--neon);color:var(--bg)}
   .navb.about{color:var(--amber)} .navb.about:hover{background:var(--input)}
+  /* AI analysis tab */
+  #view-ai{grid-template-columns:1fr;grid-template-rows:1fr}
+  .aichat{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .aimsg{max-width:82%;padding:10px 14px;border-radius:10px;font-size:12.5px;line-height:1.6}
+  .aimsg.q{align-self:flex-end;background:var(--input);border:1px solid var(--line);color:var(--txt)}
+  .aimsg.a{align-self:flex-start;background:linear-gradient(180deg,rgba(0,229,255,.06),transparent);border:1px solid var(--neon2);color:var(--txt)}
+  .aimsg.a b{color:var(--neon2)}
+  .aimsg.err{align-self:flex-start;border:1px solid var(--red);color:var(--red);background:rgba(255,77,109,.06)}
+  .aimsg.think{align-self:flex-start;color:var(--dim);border:1px dashed var(--line);animation:pulse 1.4s infinite}
+  .aibar{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+  .aibar input{flex:1;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:8px;font-family:inherit;font-size:13px}
+  .aibar input:focus{outline:none;border-color:var(--neon2);box-shadow:0 0 8px rgba(0,229,255,.25)}
+  /* SIEM */
+  #view-siem{grid-template-columns:1fr;grid-template-rows:1fr}
+  .sev{font-weight:700;letter-spacing:1px}
+  .sev1{color:var(--red)} .sev2{color:var(--amber)} .sev3{color:var(--neon2)} .sev4{color:var(--dim)}
+  .sig{color:var(--txt)}
+  /* ============================ LIQUID GLASS ============================ */
+  :root,:root[data-theme="dark"]{ --glass:rgba(10,18,27,.5); --glass-brd:rgba(255,255,255,.10); --glass-hi:rgba(255,255,255,.07); }
+  :root[data-theme="light"]{ --glass:rgba(255,255,255,.55); --glass-brd:rgba(10,60,50,.14); --glass-hi:rgba(255,255,255,.75); }
+  /* drifting liquid blobs behind the frosted glass */
+  body::before{content:"";position:fixed;inset:-30%;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(46vw 46vw at 18% 26%, color-mix(in srgb, var(--neon2) 30%, transparent), transparent 60%),
+      radial-gradient(40vw 40vw at 84% 16%, color-mix(in srgb, var(--violet) 26%, transparent), transparent 60%),
+      radial-gradient(54vw 54vw at 64% 92%, color-mix(in srgb, var(--neon) 22%, transparent), transparent 62%);
+    filter:blur(44px) saturate(135%);
+    animation:liquid 26s ease-in-out infinite alternate;}
+  @keyframes liquid{
+    0%{transform:translate(0,0) scale(1) rotate(0deg)}
+    50%{transform:translate(-3%,2%) scale(1.09) rotate(4deg)}
+    100%{transform:translate(3%,-2%) scale(1.13) rotate(-3deg)}}
+  body::after{opacity:.22}  /* soften the scanlines over glass */
+  /* frost every surface */
+  .panel,.sidebar,.topbar,.bar,.cmdstrip,.card,.about-card,.scan-card,.drawer,.toast{
+    background:var(--glass)!important;
+    -webkit-backdrop-filter:blur(22px) saturate(150%); backdrop-filter:blur(22px) saturate(150%);
+    border:1px solid var(--glass-brd)!important;
+    box-shadow:0 10px 34px rgba(0,0,0,.30), inset 0 1px 0 var(--glass-hi)!important;}
+  .panel{border-radius:14px;overflow:hidden}
+  /* glossy sheen highlight */
+  .panel::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+    background:linear-gradient(180deg,var(--glass-hi),transparent 26%);opacity:.6;mix-blend-mode:screen;z-index:0}
+  .panel > *{position:relative;z-index:1}
+  /* translucent controls */
+  .sbtn,.icon,.tab,.cmd,.pill,.demobadge,.aibar input,.topbar input,.scan-ctrl input,.scan-ctrl select,.card input{
+    background:color-mix(in srgb, var(--input) 55%, transparent)!important;
+    -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);}
+  .navb.on{-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  .aimsg{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
 </style>
 </head>
 <body>
 <div class="shell">
   <!-- SIDEBAR -->
   <aside class="sidebar">
-    <div class="side-brand"><b>◈</b> bettercap<br>RECON&nbsp;CONSOLE</div>
+    <div class="side-brand"><b>◈</b> netrecon<br>RECON&nbsp;CONSOLE</div>
     <nav class="nav">
       <button class="navb on" data-view="overview">▚ OVERVIEW</button>
       <button class="navb" data-view="hosts">☰ HOSTS <span class="nc" id="navHosts">0</span></button>
       <button class="navb" data-view="traffic">≈ TRAFFIC</button>
-      <button class="navb" data-view="scanner">⌗ SCANNER</button>
+      <button class="navb" data-view="scanner">⌗ NMAP SCAN</button>
+      <button class="navb" data-view="ai">✦ AI ANALYSIS</button>
+      <button class="navb" data-view="siem">🛡 SIEM <span class="nc" id="navAlerts">0</span></button>
       <div style="flex:1"></div>
       <button class="navb about" id="aboutBtn">ⓘ ABOUT PROJECT</button>
     </nav>
@@ -313,9 +365,9 @@
       <div class="stat"><span class="k">UPTIME</span><span class="v" id="sUp">00:00:00</span></div>
       <div class="demobadge" id="demoBadge" title="About this project"><span class="d"></span>PORTFOLIO DEMO · SYNTHETIC DATA · ⓘ</div>
       <span style="color:var(--neon);font-weight:700;margin-left:6px">›</span>
-      <input id="cmdBar" placeholder="type any bettercap command + Enter   ·   help   ·   net.show" spellcheck="false" autocomplete="off"
+      <input id="cmdBar" placeholder="filter hosts by IP / hostname / vendor …" spellcheck="false" autocomplete="off"
         style="flex:1;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:9px 12px;border-radius:7px;font-family:inherit;font-size:13px">
-      <button class="sbtn" id="scanBtn">⌗ SCAN</button>
+      <button class="sbtn" id="scanBtn">⌗ NMAP SCAN</button>
     </div>
 
     <div class="viewport">
@@ -384,7 +436,7 @@
             </div>
             <div class="node"><span class="nlabel">THIS DEVICE</span><span class="nip" id="lkMeIp">—</span><span class="nmac" id="lkMeMac"></span></div>
             <div class="spark"><span class="sparklabel" id="rateLbl"></span><canvas id="rateCv"></canvas></div>
-            <div class="lnote" id="lkNote">passive view — run <b>net.sniff</b> or <b>arp.spoof</b> to see full router↔device traffic</div>
+            <div class="lnote" id="lkNote">passive view — run <b>netrecon serve --monitor</b> (as admin) to capture live router↔device traffic</div>
           </div>
         </div>
         <div class="panel">
@@ -401,6 +453,29 @@
           <div class="feed" id="feed"></div>
         </div>
       </section>
+
+      <!-- ===== AI ANALYSIS ===== -->
+      <section class="view" id="view-ai">
+        <div class="panel">
+          <div class="ph plain">✦ AI ANALYSIS — ASK ABOUT YOUR NETWORK</div>
+          <div class="aichat" id="aiChat"></div>
+          <div class="aibar">
+            <input id="aiQ" placeholder="e.g. which devices look risky?  ·  what is 192.168.88.165?  ·  summarize my network" spellcheck="false" autocomplete="off">
+            <button class="sbtn" id="aiSend">✦ ASK</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SIEM ===== -->
+      <section class="view" id="view-siem">
+        <div class="panel">
+          <div class="ph plain">🛡 SIEM — IDS ALERTS <span class="n" id="siemMeta">ingest Suricata/Zeek logs: netrecon ingest &lt;file&gt;</span></div>
+          <div class="tbl" id="siemTbl">
+            <table><thead><tr><th>TIME</th><th>SEV</th><th>SIGNATURE</th><th>CATEGORY</th><th>SOURCE</th><th>DEST</th></tr></thead>
+            <tbody id="rowsAlerts"></tbody></table>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 </div>
@@ -414,7 +489,7 @@
 <!-- PORT SCANNER (Zenmap-style) -->
 <div class="scan-modal" id="scanModal">
   <div class="scan-card">
-    <div class="scan-head">⌗ PORT SCANNER <span style="color:var(--dim);font-size:10px;letter-spacing:1px">· bettercap syn.scan</span><span class="x" id="scanClose">✕</span></div>
+    <div class="scan-head">⌗ NMAP SCAN <span style="color:var(--dim);font-size:10px;letter-spacing:1px">· netrecon port scan</span><span class="x" id="scanClose">✕</span></div>
     <div class="scan-ctrl">
       <label>TARGET</label>
       <input class="tgt" id="scanTarget" placeholder="192.168.1.10 or 192.168.1.1-50" list="scanHosts">
@@ -433,7 +508,7 @@
       <span class="scan-status" id="scanStatus">idle</span>
     </div>
     <div class="scan-body" id="scanBody">
-      <div class="scan-empty"><div>No scan results yet.</div><div style="font-size:11px">Pick a target and hit SCAN — open ports appear here as bettercap finds them.</div></div>
+      <div class="scan-empty"><div>No scan results yet.</div><div style="font-size:11px">Pick a target and hit SCAN — open ports appear here as netrecon finds them.</div></div>
     </div>
   </div>
 </div>
@@ -444,7 +519,7 @@
     <div class="about-hero">
       <span class="x" id="aboutClose">✕</span>
       <h1>◈ RECON CONSOLE</h1>
-      <div class="sub">A real-time LAN reconnaissance &amp; network-monitoring console built on <b>bettercap</b> — live host discovery, wireless &amp; BLE mapping, MITM-based traffic interception, a syn-scan port scanner, and an on-device analyzer, all in one operator UI. <b>You're viewing the live synthetic demo</b> — the production tool runs against a real network via a local capture engine.</div>
+      <div class="sub">The web console for <b>netrecon</b> — an open-source Python network reconnaissance &amp; monitoring toolkit. Live host discovery, port scanning, per-device drill-down, ARP-spoof MITM traffic interception, passive flow/DNS capture, and an on-device analyzer — all in one operator UI, running on your real network via the netrecon engine.</div>
     </div>
     <div class="about-body">
       <h2>WHAT IT DOES</h2>
@@ -452,10 +527,10 @@
 
       <h2>ARCHITECTURE</h2>
       <div class="about-steps">
-        <div class="s"><span class="n">1</span><span><b>Capture / recon</b> — bettercap (Go) bound to the LAN adapter via Npcap; net.recon + net.probe for host discovery, syn.scan for ports.</span></div>
-        <div class="s"><span class="n">2</span><span><b>API</b> — bettercap's local REST API (basic-auth) exposes session, hosts, wifi/ble, per-IP traffic counters, and an events feed.</span></div>
-        <div class="s"><span class="n">3</span><span><b>UI</b> — a single self-contained HTML/JS console (zero framework, zero backend) polling every 2s; canvas radar &amp; charts, drill-down drawer, command bar.</span></div>
-        <div class="s"><span class="n">4</span><span><b>Roadmap</b> — offload deep packet analysis to Zeek/Suricata → Vector → ClickHouse, turning this into a home-grown SIEM with flow search, DNS/TLS-SNI logging, threat-intel enrichment, and phone alerting.</span></div>
+        <div class="s"><span class="n">1</span><span><b>Engine</b> — netrecon (Python): concurrent ping/ARP discovery, async TCP port scan, raw-socket flow/DNS capture, and Scapy-based ARP-spoof MITM. No admin needed for the core scan.</span></div>
+        <div class="s"><span class="n">2</span><span><b>API</b> — <code>netrecon serve</code> hosts this console and a local REST API (session, hosts, per-IP traffic, events, MITM control, AI) over a SQLite asset inventory.</span></div>
+        <div class="s"><span class="n">3</span><span><b>UI</b> — a single self-contained HTML/JS console (zero framework) polling every 2s: canvas radar &amp; charts, drill-down drawer, port scanner, and an AI analyst tab.</span></div>
+        <div class="s"><span class="n">4</span><span><b>SIEM</b> — <code>netrecon ingest</code> pulls Suricata/Zeek logs into the store; <code>netrecon alerts</code> surfaces IDS detections. Roadmap: threat-intel enrichment + anomaly scoring.</span></div>
       </div>
 
       <h2>SKILLS DEMONSTRATED</h2>
@@ -470,7 +545,7 @@
       </div>
 
       <h2>TECH</h2>
-      <p>bettercap · Npcap · Go/cgo · REST · vanilla HTML/JS/Canvas · PowerShell · (roadmap: Zeek · Suricata · Vector · ClickHouse · Grafana · ntfy)</p>
+      <p>Python · asyncio · Scapy · Npcap · SQLite · stdlib http.server · vanilla HTML/JS/Canvas · Anthropic API · (SIEM: Suricata · Zeek · ntfy)</p>
 
       <h2>BUILT BY</h2>
       <p>Terrill Hilliard — IT Support &amp; Security Operations · M.S. Cybersecurity · CySA+ / PenTest+ / ISC² CC</p>
@@ -491,7 +566,7 @@
 <div class="modal" id="confirm">
   <div class="card">
     <h3 id="cfTitle">◈ RUN COMMAND</h3>
-    <div style="color:var(--dim);font-size:11px;letter-spacing:1px;margin-bottom:6px">This will execute on the live bettercap session:</div>
+    <div style="color:var(--dim);font-size:11px;letter-spacing:1px;margin-bottom:6px">This will run on the live netrecon session:</div>
     <div class="cmd" id="cfCmd" style="cursor:default"></div>
     <div id="cfWarn" style="display:none;color:var(--red);font-size:11px;margin-top:10px">⚠ OFFENSIVE MODULE — only run against networks you are authorized to test.</div>
     <div class="row"><button class="btn sec" id="cfCancel">CANCEL</button><button class="btn" id="cfRun">EXECUTE</button></div>
@@ -504,21 +579,21 @@
     <h3>◈ API LINK CONFIG</h3>
     <label>REST API ENDPOINT</label><input id="mBase" placeholder="http://127.0.0.1:8081">
     <label>USERNAME</label><input id="mUser" placeholder="admin">
-    <label>PASSWORD</label><input id="mPass" type="password" placeholder="bettercap">
+    <label>PASSWORD</label><input id="mPass" type="password" placeholder="(none — netrecon serve is unauthenticated on localhost)">
     <div class="row"><button class="btn sec" id="mCancel">CANCEL</button><button class="btn" id="mSave">CONNECT</button></div>
   </div>
 </div>
 
 <script>
 "use strict";
-const LS="bettercap.dash.cfg", TKEY="bettercap.theme";
+const LS="netrecon.dash.cfg", TKEY="netrecon.theme";
 const q=new URLSearchParams(location.search);
 // Portfolio/live detection: on localhost (served by bettercap) run LIVE; anywhere else
 // (Vercel/GitHub Pages/etc.) auto-run the synthetic DEMO so it's a safe public showcase.
 const _host=location.hostname;
 const _isLocal=_host===""||/^(localhost|127\.|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(_host);
 const DEMO = q.get("demo")==="1" || (!_isLocal && q.get("live")!=="1");
-const cfg=Object.assign({base:`http://${location.hostname||"127.0.0.1"}:8081`,user:"admin",pass:"bettercap"},
+const cfg=Object.assign({base:(location.origin&&location.origin.indexOf("http")===0)?location.origin:"http://127.0.0.1:8081",user:"admin",pass:""},
   JSON.parse(localStorage.getItem(LS)||"{}"));
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const auth=()=>"Basic "+btoa(`${cfg.user}:${cfg.pass}`);
@@ -534,7 +609,7 @@ function tagClass(t){t=t||"";if(t.includes("new"))return"tg-new";if(t.includes("
 function evMsg(e){const d=e.data;if(d&&typeof d==="object"){if(d.ipv4||d.mac)return `${d.ipv4||""} ${d.hostname||d.vendor||d.mac||""}`.trim();if(d.essid||d.hostname)return d.essid||d.hostname;if(d.message||d.prompt)return d.message||d.prompt;}return typeof d==="string"?d:"";}
 
 // state
-let hosts=[], wifi=[], ble=[], gateway=null, iface=null, startedAt=null, online=false, curTab="lan", known=new Set();
+let hosts=[], wifi=[], ble=[], gateway=null, iface=null, startedAt=null, online=false, curTab="lan", known=new Set(), hostFilter="";
 
 // theme
 function pal(){const c=getComputedStyle(document.documentElement);const g=n=>c.getPropertyValue(n).trim();
@@ -561,10 +636,11 @@ async function poll(){
     renderTraffic(st.sent,st.received,st.pkts_received,(s.packets&&s.packets.protos)||{});
     renderTop(); renderAll();
     try{renderEvents(await api("/api/events")||[]);}catch(_){}
+    loadAlerts();
   }catch(e){online=false;setConn(false);}
 }
 function setConn(up){$("#conDot").className="dot"+(up?" live":"");$("#conTxt").textContent=up?"LINK ACTIVE":"OFFLINE";
-  if(!up)$("#rlabel").textContent="NO SIGNAL — is bettercap running with api.rest + http.server?";}
+  if(!up)$("#rlabel").textContent="NO SIGNAL — run 'netrecon serve' in a terminal to feed this console.";}
 
 function renderTop(){
   $("#sHosts").textContent=hosts.length; $("#radarCount").textContent=hosts.length+" CONTACTS";
@@ -581,8 +657,9 @@ function emptyRow(cols,msg){return `<tr><td colspan="${cols}"><div class="empty"
 
 function renderLan(){
   const rows=$("#rowsLan"); const gwMac=gateway&&gateway.mac;
-  const list=[...hosts].sort((a,b)=>new Date(b.last_seen)-new Date(a.last_seen));
-  if(!list.length){rows.innerHTML=emptyRow(5,"NO HOSTS YET — probing…");known=new Set();return;}
+  let list=[...hosts].sort((a,b)=>new Date(b.last_seen)-new Date(a.last_seen));
+  if(hostFilter)list=list.filter(h=>`${h.ipv4||""} ${h.hostname||""} ${h.vendor||""} ${h.mac||""}`.toLowerCase().includes(hostFilter));
+  if(!list.length){rows.innerHTML=emptyRow(5,hostFilter?"NO MATCHES":"NO HOSTS YET — probing…");if(!hostFilter)known=new Set();return;}
   rows.innerHTML="";
   for(const h of list){
     const tr=document.createElement("tr");
@@ -687,12 +764,13 @@ async function openHost(mac){
     ["Last seen",h.last_seen?new Date(h.last_seen).toLocaleString()+" ("+ago(h.last_seen)+")":""],
   ])+metaBlock(h.meta)
   +`<div class="sect">MITM — INTERCEPT THIS DEVICE</div>`
-    +`<div class="cmd mitm" data-cmd="set arp.spoof.targets ${esc(h.ipv4||"")}; set net.sniff.filter host ${esc(h.ipv4||"")}; arp.spoof on; net.sniff on"><span class="txt">⚡ MITM THIS DEVICE</span><span class="run">▶ START</span></div>`
-    +`<button class="mitmstop" data-stop="arp.spoof off; net.sniff off">■ STOP MITM — restore ARP &amp; stop sniff</button>`
-    +`<div class="sect">MORE ACTIONS</div>`
-    +cmdRow(`syn.scan ${h.ipv4||""} 1 10000`)
-    +cmdRow(`set net.sniff.filter host ${h.ipv4||""}; net.sniff on`)
-    +cmdRow(`net.show ${h.ipv4||""}`);
+    +`<div class="cmd mitm" data-mitm="${esc(h.ipv4||"")}"><span class="txt">⚡ MITM THIS DEVICE</span><span class="run">▶ START</span></div>`
+    +`<button class="mitmstop" data-mitmstop="1">■ STOP MITM — restore ARP</button>`
+    +`<div class="lnote" style="margin-top:8px">Captured <b>DNS &amp; HTTP</b> from this device appear in the <b>TRAFFIC</b> view. Requires <code>netrecon serve</code> launched as Administrator (Npcap).</div>`
+    +`<div class="sect">netrecon CLI — click to copy</div>`
+    +cmdCopy(`netrecon mitm ${h.ipv4||""}`)
+    +cmdCopy(`netrecon scan ${h.ipv4||""}`)
+    +cmdCopy(`netrecon flows`);
   showDrawer((h.hostname||h.ipv4||"HOST"),body);
 }
 function openWifi(mac){
@@ -785,7 +863,7 @@ function demoTick(){
   const tags=["endpoint.new","sys.log","wifi.ap.new","mod.started","endpoint.lost"];
   if(Math.random()<0.5){const h=demoHosts[Math.floor(Math.random()*demoHosts.length)];
     demoEv.push({tag:tags[Math.floor(Math.random()*tags.length)],time:new Date().toISOString(),data:{ipv4:h.ipv4,hostname:h.hostname,vendor:h.vendor,mac:h.mac}});demoEv=demoEv.slice(-60);}
-  renderTop();renderAll();renderEvents(demoEv);
+  renderTop();renderAll();renderEvents(demoEv);loadAlerts();
 }
 
 // ================= CHANNEL ACTIVITY CHART =================
@@ -851,10 +929,27 @@ function askRun(cmd){
 }
 $("#cfCancel").onclick=()=>{$("#confirm").classList.remove("on");pendingCmd=null;};
 $("#cfRun").onclick=()=>{$("#confirm").classList.remove("on");if(pendingCmd)runCmd(pendingCmd);pendingCmd=null;};
-// delegate clicks on any command row / stop button in the drawer
+// drawer: MITM start/stop + copy-to-clipboard for netrecon CLI commands
+function cmdCopy(c){c=c.trim();return `<div class="cmd" data-copy="${esc(c)}"><span class="txt">${esc(c)}</span><span class="run">⧉ COPY</span></div>`;}
+async function startMitm(ip){
+  drawer.classList.remove("on");
+  if(DEMO){toast(`demo — run <b>netrecon mitm ${esc(ip)}</b> (as admin) for real interception`,"warn");return;}
+  toast(`⚡ starting MITM on <b>${esc(ip)}</b> …`,"warn");
+  try{
+    const r=await fetch(cfg.base+"/api/mitm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target:ip})});
+    const d=await r.json();
+    if(d.success){toast(`✓ MITM active on <b>${esc(ip)}</b> — see the TRAFFIC view`);showView("traffic");}
+    else toast(`✗ ${esc(d.error||"failed")}`,"err");
+  }catch(e){toast(`✗ ${esc(e.message)}`,"err");}
+}
+async function stopMitm(){
+  try{await fetch(cfg.base+"/api/mitm/stop",{method:"POST"});toast("■ MITM stopped — ARP restored");}
+  catch(e){toast(`✗ ${esc(e.message)}`,"err");}
+}
 $("#dBody").addEventListener("click",e=>{
-  const stop=e.target.closest("[data-stop]"); if(stop){toast("⏻ stopping MITM…","warn");runCmd(stop.dataset.stop);return;}
-  const el=e.target.closest(".cmd[data-cmd]"); if(el)askRun(el.dataset.cmd);
+  const m=e.target.closest("[data-mitm]"); if(m){startMitm(m.dataset.mitm);return;}
+  const ms=e.target.closest("[data-mitmstop]"); if(ms){stopMitm();return;}
+  const cp=e.target.closest("[data-copy]"); if(cp){if(navigator.clipboard)navigator.clipboard.writeText(cp.dataset.copy);toast(`copied: <b>${esc(cp.dataset.copy)}</b>`);return;}
 });
 
 // ================= ROUTER <-> ENDPOINT LINK =================
@@ -899,20 +994,18 @@ function renderLink(){
 
 // ================= COMMAND BAR =================
 const cmdBar=$("#cmdBar");
-cmdBar.addEventListener("keydown",e=>{
-  if(e.key!=="Enter")return;
-  const c=cmdBar.value.trim(); if(!c)return; cmdBar.value="";
-  if(isDanger(c))askRun(c); else runCmd(c);
+cmdBar.addEventListener("input",()=>{
+  hostFilter=cmdBar.value.trim().toLowerCase();
+  if(hostFilter&&activeView!=="hosts")showView("hosts");
+  renderLan();
 });
 
-// ================= PANIC — STOP ALL ATTACKS =================
-const PANIC=["arp.spoof off","dns.spoof off","ndp.spoof off","dhcp6.spoof off","net.sniff off","http.proxy off","https.proxy off","syn.scan stop"];
+// ================= STOP ALL — halt any active MITM =================
 $("#panicBtn").onclick=async()=>{
-  if(DEMO){toast("DEMO — would stop all attack modules","warn");return;}
-  toast("⏻ stopping all attack modules…","warn");
-  await Promise.allSettled(PANIC.map(c=>fetch(cfg.base+"/api/session",{method:"POST",
-    headers:{Authorization:auth(),"Content-Type":"application/json"},body:JSON.stringify({cmd:c})})));
-  toast("✓ attack modules stopped"); poll();
+  if(DEMO){toast("demo — 'STOP ALL' halts an active MITM when running live","warn");return;}
+  toast("⏻ stopping MITM…","warn");
+  try{ await fetch(cfg.base+"/api/mitm/stop",{method:"POST"}); toast("✓ MITM stopped — ARP restored"); poll(); }
+  catch(e){ toast("✗ "+esc(e.message),"err"); }
 };
 
 // ================= PORT SCANNER (syn.scan) =================
@@ -947,19 +1040,17 @@ $("#scanClose").onclick=()=>$("#scanModal").classList.remove("on");
 $("#scanPreset").onchange=()=>{const c=$("#scanPreset").value==="custom";$("#scanStart").style.display=c?"":"none";$("#scanEnd").style.display=c?"":"none";};
 function scanRange(){const p=$("#scanPreset").value;if(p==="custom")return[(+$("#scanStart").value||1),(+$("#scanEnd").value||1024)];const a=p.split("-");return[+a[0],+a[1]];}
 $("#scanGo").onclick=()=>{
-  const tgt=$("#scanTarget").value.trim(); if(!tgt){toast("enter a target IP or range","warn");return;}
-  const rg=scanRange();
   scanning=true; scanStartT=Date.now(); updScanStatus();
-  runCmd(`syn.scan ${tgt} ${rg[0]} ${rg[1]}`);
+  toast("netrecon rescans on its interval — showing live open ports");
   if(scanTimer)clearInterval(scanTimer);
   scanTimer=setInterval(()=>{renderScan();if(!DEMO)poll();},1500);
 };
-$("#scanStop").onclick=()=>{scanning=false;if(scanTimer)clearInterval(scanTimer);runCmd("syn.scan stop");updScanStatus();};
+$("#scanStop").onclick=()=>{scanning=false;if(scanTimer)clearInterval(scanTimer);updScanStatus();};
 
 // ================= AI ANALYZER (on-device heuristic) =================
 function analyze(){
   const hs=DEMO?demoHosts:hosts, w=wifi, S=[];
-  if(!hs.length&&!online) return `<span class="muted">Awaiting a live bettercap link — start the session to generate an assessment.</span>`;
+  if(!hs.length&&!online) return `<span class="muted">Awaiting a live netrecon link — run 'netrecon serve' to generate an assessment.</span>`;
   const sub=iface&&iface.ipv4?iface.ipv4.replace(/\.\d+$/,".0/24"):"the local network";
   S.push(`This session is monitoring <b>${esc(sub)}</b> and has mapped <b>${hs.length}</b> host${hs.length===1?"":"s"}${iface?` from <b>${esc(iface.ipv4||"")}</b>`:""}.`);
   if(gateway) S.push(`The gateway sits at <b>${esc(gateway.ipv4||"")}</b>${gateway.vendor?` (<b>${esc(gateway.vendor)}</b> hardware)`:""} and carries all upstream traffic.`);
@@ -1045,7 +1136,7 @@ function showView(v){
   document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="view-"+v));
   document.querySelectorAll(".navb").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
   activeView=v;
-  requestAnimationFrame(()=>{ resize(); if(v==="hosts")drawChannels(); if(v==="traffic")drawRate(); });
+  requestAnimationFrame(()=>{ resize(); if(v==="hosts")drawChannels(); if(v==="traffic")drawRate(); if(v==="siem")loadAlerts(); });
 }
 document.querySelectorAll(".navb[data-view]").forEach(b=>b.onclick=()=>{ b.dataset.view==="scanner"?openScan():showView(b.dataset.view); });
 
@@ -1056,6 +1147,52 @@ $("#aboutClose").onclick=()=>$("#aboutModal").classList.remove("on");
 $("#aboutModal").addEventListener("click",e=>{ if(e.target.id==="aboutModal")$("#aboutModal").classList.remove("on"); });
 $("#demoBadge").onclick=openAbout;
 if(DEMO){ $("#demoBadge").classList.add("on"); document.title="RECON CONSOLE — Terrill Hilliard · Live Demo"; }
+
+// ================= AI ANALYSIS =================
+function aiAppend(kind,html){const c=$("#aiChat");if(!c)return null;const d=document.createElement("div");d.className="aimsg "+kind;d.innerHTML=html;c.appendChild(d);c.scrollTop=c.scrollHeight;return d;}
+async function aiAsk(){
+  const inp=$("#aiQ");const q=inp.value.trim();if(!q)return;inp.value="";
+  aiAppend("q",esc(q));
+  const think=aiAppend("a think","analyzing your network …");
+  if(DEMO){ if(think)think.remove(); aiAppend("a",'<b>Demo mode.</b> The AI analyst runs when you launch <b>netrecon serve</b> with an Anthropic API key (ANTHROPIC_API_KEY). It answers questions about your live network — open ports, risky services, unknown devices, and MITM findings.'); return; }
+  try{
+    const r=await fetch(cfg.base+"/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q})});
+    const d=await r.json(); if(think)think.remove();
+    if(d.error) aiAppend("a err",esc(d.error));
+    else aiAppend("a",esc(d.answer).replace(/\n/g,"<br>"));
+  }catch(e){ if(think)think.remove(); aiAppend("a err","request failed: "+esc(e.message)); }
+}
+if($("#aiSend")){ $("#aiSend").onclick=aiAsk; $("#aiQ").addEventListener("keydown",e=>{if(e.key==="Enter")aiAsk();});
+  aiAppend("a",'<b>✦ netrecon AI analyst.</b> Ask about the devices, ports, and traffic I\'ve found — e.g. <i>"which hosts are risky?"</i>, <i>"what is 192.168.88.165?"</i>, <i>"any signs of a rogue device?"</i>'); }
+
+// ================= SIEM ALERTS =================
+let alertsCache=[];
+function sevLabel(s){return {1:"1·HIGH",2:"2·MED",3:"3·LOW",4:"4·INFO"}[s]||(s||"-");}
+async function loadAlerts(){
+  if(DEMO){alertsCache=demoAlerts();renderAlerts();return;}
+  try{const r=await fetch(cfg.base+"/api/alerts",{cache:"no-store"});const d=await r.json();if(Array.isArray(d)){alertsCache=d;renderAlerts();}}catch(_){}
+}
+function renderAlerts(){
+  const rows=$("#rowsAlerts"); if(!rows)return;
+  const na=document.getElementById("navAlerts"); if(na)na.textContent=alertsCache.length;
+  if(!alertsCache.length){rows.innerHTML=emptyRow(6,"NO ALERTS — ingest sensor logs: netrecon ingest &lt;file&gt;");return;}
+  rows.innerHTML="";
+  for(const a of alertsCache){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${esc((a.ts||"").slice(0,19))}</td>
+      <td class="sev sev${a.severity||4}">${esc(sevLabel(a.severity))}</td>
+      <td class="sig">${esc(a.signature||"")}</td>
+      <td class="muted">${esc(a.category||"")}</td>
+      <td class="mac">${esc(a.src||"")}${a.sport?":"+a.sport:""}</td>
+      <td class="mac">${esc(a.dst||"")}${a.dport?":"+a.dport:""}</td>`;
+    rows.appendChild(tr);
+  }
+}
+function demoAlerts(){return [
+  {ts:"2026-07-26T04:00:01",severity:1,signature:"ET MALWARE Cobalt Strike Beacon Observed",category:"A Network Trojan was Detected",src:"192.168.1.20",sport:50432,dst:"45.133.1.20",dport:443},
+  {ts:"2026-07-26T04:01:12",severity:2,signature:"ET SCAN Nmap Scripting Engine User-Agent",category:"Attempted Information Leak",src:"192.168.1.55",dst:"192.168.1.1",dport:80},
+  {ts:"2026-07-26T04:02:33",severity:3,signature:"ET INFO Observed DNS Query to .top TLD",category:"Misc activity",src:"192.168.1.30",dst:"8.8.8.8",dport:53},
+];}
 
 // boot
 if(DEMO)$("#rlabel").textContent="DEMO MODE — synthetic data";

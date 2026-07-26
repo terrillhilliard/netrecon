@@ -3,7 +3,7 @@
 import socket
 import struct
 
-from netrecon import enrich, ingest, monitor, net, scanner, watch
+from netrecon import ai, enrich, ingest, mitm, monitor, net, scanner, watch
 
 
 def _dns_packet(name, src="192.168.1.50", dst="8.8.8.8"):
@@ -112,3 +112,21 @@ def test_detect_format():
     assert ingest.detect_format("/logs/eve.json") == "suricata"
     assert ingest.detect_format("/logs/conn.log") == "zeek-conn"
     assert ingest.detect_format("/logs/dns.log") == "zeek-dns"
+
+
+def test_mitm_http_host():
+    raw = b"GET /index.html HTTP/1.1\r\nHost: tracker.example.com\r\nUser-Agent: x\r\n\r\n"
+    assert mitm.http_host(raw) == "tracker.example.com"
+    assert mitm.http_host(b"not http") is None
+
+
+def test_ai_build_context():
+    session = {
+        "interface": {"ipv4": "192.168.1.50", "hostname": "pc"},
+        "gateway": {"ipv4": "192.168.1.1"},
+        "lan": {"hosts": [{"ipv4": "192.168.1.10", "hostname": "tv", "vendor": "Sony",
+                           "meta": {"values": {"ports": {"80": {}, "443": {}}}}}]},
+        "packets": {"stats": {}, "protos": {}},
+    }
+    ctx = ai.build_context(session, [])
+    assert "192.168.1.10" in ctx and "Sony" in ctx and "80" in ctx

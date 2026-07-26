@@ -146,6 +146,7 @@ def cmd_serve(args) -> None:
         host=args.host, port=args.port, target=args.target, ports=ports,
         timeout=args.timeout, db_path=args.db, rescan=args.rescan,
         monitor_on=args.monitor, open_browser=not args.no_browser, iface=iface,
+        ai_key=args.ai_key, ai_model=args.ai_model,
     )
 
 
@@ -236,6 +237,94 @@ def cmd_alerts(args) -> None:
         output.note(f"{len(rows)} alert(s) in [dim]{args.db}[/]")
 
 
+def cmd_mitm(args) -> None:
+    import collections
+    import time as _t
+
+    from . import mitm
+
+    iface = net.select_interface(getattr(args, "iface", None))
+    gw = args.gateway or iface.get("gateway")
+    if not gw:
+        output.note("could not determine the gateway - pass --gateway <ip>")
+        return
+
+    flows = collections.defaultdict(lambda: {"packets": 0, "bytes": 0})
+    dnsq: "collections.Counter" = collections.Counter()
+
+    def on_flow(src, dst, proto, dport, length):
+        f = flows[(src, dst, proto, dport or 0)]
+        f["packets"] += 1
+        f["bytes"] += length
+
+    def on_dns(client, qname):
+        dnsq[(client, qname)] += 1
+        output.note(f"DNS  {client} -> {qname}")
+
+    def on_http(client, host):
+        output.note(f"HTTP {client} -> {host}")
+
+    sess = mitm.MitmSession(args.target, gw, iface=None,
+                            on_flow=on_flow, on_dns=on_dns, on_http=on_http)
+    output.note(f"[bold red]MITM[/] {args.target} <-> {gw} on {iface['name']} - "
+                f"forwarding + capturing. Ctrl-C to stop.")
+    output.note("only run against devices you own or are authorized to test.")
+    try:
+        sess.start()
+        while True:
+            _t.sleep(3)
+            output.note(f"{sess.stats['packets']} pkts | {sess.stats['forwarded']} forwarded | "
+                        f"{sess.stats['dns']} dns")
+    except KeyboardInterrupt:
+        pass
+    except ImportError:
+        output.note("MITM needs scapy - run: pip install scapy")
+        return
+    except RuntimeError as e:
+        output.note(str(e))
+        return
+    except (PermissionError, OSError) as e:
+        output.note(f"MITM needs Administrator + Npcap: {e}")
+        return
+    finally:
+        output.note("restoring ARP tables ...")
+        try:
+            sess.stop()
+        except Exception:
+            pass
+
+    con = store.connect(args.db)
+    store.save_flows(con, dict(flows))
+    store.save_dns(con, dict(dnsq))
+    con.close()
+    output.note(f"[green]saved[/] {len(flows)} flows, {len(dnsq)} DNS names to [dim]{args.db}[/]")
+    output.note("view with: netrecon flows   |   netrecon dns")
+
+
+def cmd_flows(args) -> None:
+    con = store.connect(args.db)
+    rows = [dict(r) for r in store.top_flows(con, args.limit)]
+    con.close()
+    if args.json:
+        print(output.to_json(rows))
+    else:
+        if rows:
+            output.print_flows(rows)
+        output.note(f"{len(rows)} flow(s) in [dim]{args.db}[/]")
+
+
+def cmd_dns(args) -> None:
+    con = store.connect(args.db)
+    rows = [dict(r) for r in store.recent_dns(con, args.limit)]
+    con.close()
+    if args.json:
+        print(output.to_json(rows))
+    else:
+        if rows:
+            output.print_dns(rows)
+        output.note(f"{len(rows)} DNS name(s) in [dim]{args.db}[/]")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="netrecon",
@@ -285,6 +374,8 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--monitor", action="store_true", help="also run passive capture (needs admin)")
     v.add_argument("--db", default=store.DEFAULT_DB)
     v.add_argument("--no-browser", action="store_true", help="don't auto-open a browser")
+    v.add_argument("--ai-key", help="Anthropic API key for the AI ANALYSIS tab (else $ANTHROPIC_API_KEY)")
+    v.add_argument("--ai-model", help="AI model id (default: claude-sonnet-5)")
     v.set_defaults(func=cmd_serve)
 
     w = sub.add_parser("watch", help="continuously scan and alert on new devices / new ports")
@@ -298,6 +389,25 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--db", default=store.DEFAULT_DB)
     w.add_argument("--once", action="store_true", help="one pass then exit (sets baseline)")
     w.set_defaults(func=cmd_watch)
+
+    mi = sub.add_parser("mitm", help="ARP-spoof MITM a device + capture/analyze its traffic (admin)")
+    mi.add_argument("target", help="target device IP to intercept")
+    mi.add_argument("--gateway", help="gateway IP (default: from the selected interface)")
+    mi.add_argument("--iface", help="interface name or IP (default: auto)")
+    mi.add_argument("--db", default=store.DEFAULT_DB)
+    mi.set_defaults(func=cmd_mitm)
+
+    fl = sub.add_parser("flows", help="show captured traffic flows (top talkers)")
+    fl.add_argument("--limit", type=int, default=30)
+    fl.add_argument("--json", action="store_true")
+    fl.add_argument("--db", default=store.DEFAULT_DB)
+    fl.set_defaults(func=cmd_flows)
+
+    dn = sub.add_parser("dns", help="show captured DNS queries")
+    dn.add_argument("--limit", type=int, default=50)
+    dn.add_argument("--json", action="store_true")
+    dn.add_argument("--db", default=store.DEFAULT_DB)
+    dn.set_defaults(func=cmd_dns)
 
     ig = sub.add_parser("ingest", help="ingest Suricata eve.json / Zeek logs into the store (SIEM)")
     ig.add_argument("paths", nargs="+", help="log files, globs, or directories")
