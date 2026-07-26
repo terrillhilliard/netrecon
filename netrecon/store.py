@@ -35,6 +35,16 @@ CREATE TABLE IF NOT EXISTS scans(
   host_count INTEGER,
   open_ports INTEGER
 );
+CREATE TABLE IF NOT EXISTS flows(
+  src TEXT, dst TEXT, proto TEXT, dport INTEGER,
+  packets INTEGER DEFAULT 0, bytes INTEGER DEFAULT 0,
+  first_seen REAL, last_seen REAL,
+  PRIMARY KEY(src, dst, proto, dport)
+);
+CREATE TABLE IF NOT EXISTS dns(
+  client TEXT, qname TEXT, hits INTEGER DEFAULT 1, last_seen REAL,
+  PRIMARY KEY(client, qname)
+);
 """
 
 
@@ -92,4 +102,44 @@ def ports_for(con: sqlite3.Connection, mac: str) -> List[sqlite3.Row]:
     con.row_factory = sqlite3.Row
     return con.execute(
         "SELECT * FROM ports WHERE mac=? ORDER BY port", (mac,)
+    ).fetchall()
+
+
+def save_flows(con: sqlite3.Connection, flows: dict) -> None:
+    """flows: {(src,dst,proto,dport): {'packets':int,'bytes':int}}"""
+    now = time.time()
+    for (src, dst, proto, dport), agg in flows.items():
+        con.execute(
+            "INSERT INTO flows(src,dst,proto,dport,packets,bytes,first_seen,last_seen) "
+            "VALUES(?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(src,dst,proto,dport) DO UPDATE SET "
+            "packets=packets+excluded.packets, bytes=bytes+excluded.bytes, last_seen=excluded.last_seen",
+            (src, dst, proto, dport, agg["packets"], agg["bytes"], now, now),
+        )
+    con.commit()
+
+
+def save_dns(con: sqlite3.Connection, queries: dict) -> None:
+    """queries: {(client, qname): hits}"""
+    now = time.time()
+    for (client, qname), hits in queries.items():
+        con.execute(
+            "INSERT INTO dns(client,qname,hits,last_seen) VALUES(?,?,?,?) "
+            "ON CONFLICT(client,qname) DO UPDATE SET hits=hits+excluded.hits, last_seen=excluded.last_seen",
+            (client, qname, hits, now),
+        )
+    con.commit()
+
+
+def top_flows(con: sqlite3.Connection, limit: int = 25) -> List[sqlite3.Row]:
+    con.row_factory = sqlite3.Row
+    return con.execute(
+        "SELECT * FROM flows ORDER BY bytes DESC LIMIT ?", (limit,)
+    ).fetchall()
+
+
+def recent_dns(con: sqlite3.Connection, limit: int = 50) -> List[sqlite3.Row]:
+    con.row_factory = sqlite3.Row
+    return con.execute(
+        "SELECT * FROM dns ORDER BY last_seen DESC LIMIT ?", (limit,)
     ).fetchall()

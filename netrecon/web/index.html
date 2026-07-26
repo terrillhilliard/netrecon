@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bettercap · RECON CONSOLE</title>
+<style>
+  :root, :root[data-theme="dark"]{
+    --bg:#04070a; --panel:#0a1119; --panel2:#0c141d;
+    --line:#12303f; --dim:#3d5566; --txt:#c9f7e8; --rowline:#0b1a24; --hover:#0b1a24;
+    --neon:#00ffc3; --neon2:#00e5ff; --amber:#ffcf4d; --red:#ff4d6d; --violet:#a56bff;
+    --input:#060d13; --ring:#0f2a38; --spoke:#0a1f2b; --scan:.14;
+    --glow:0 0 8px var(--neon), 0 0 18px rgba(0,255,195,.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#eef3f2; --panel:#ffffff; --panel2:#f4f8f7;
+    --line:#c9dad6; --dim:#7c908c; --txt:#123a33; --rowline:#e4ecea; --hover:#eaf4f1;
+    --neon:#00a884; --neon2:#0091b0; --amber:#b6820f; --red:#d13a57; --violet:#7a45d6;
+    --input:#f4f8f7; --ring:#d4e2df; --spoke:#e0ebe8; --scan:.03;
+    --glow:0 0 6px rgba(0,168,132,.4);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 70% -10%, rgba(0,229,255,.06), transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, rgba(165,107,255,.06), transparent 60%),
+      var(--bg);
+    color:var(--txt); font-family:"SFMono-Regular",ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,monospace;
+    font-size:13px; overflow:hidden; transition:background .3s,color .3s;
+  }
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:90;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,var(--scan)) 2px 3px);
+    mix-blend-mode:multiply;opacity:.6}
+  .app{display:grid;grid-template-rows:auto auto 1fr auto auto;height:100vh;gap:10px;padding:12px}
+  /* command strip */
+  .cmdstrip{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel),var(--panel2));border-radius:10px}
+  .cmdstrip .prompt{color:var(--neon);font-weight:700}
+  .cmdstrip input{flex:1;background:var(--input);border:1px solid var(--line);color:var(--txt);
+    padding:9px 12px;border-radius:7px;font-family:inherit;font-size:13px}
+  .cmdstrip input:focus{outline:none;border-color:var(--neon);box-shadow:0 0 8px rgba(0,255,195,.25)}
+  .cmdstrip input::placeholder{color:var(--dim)}
+  .sbtn{padding:9px 14px;border:1px solid var(--line);background:var(--input);color:var(--neon2);
+    border-radius:7px;font-family:inherit;letter-spacing:1px;font-size:11px;cursor:pointer;white-space:nowrap}
+  .sbtn:hover{border-color:var(--neon2);box-shadow:0 0 8px rgba(0,229,255,.25)}
+  .sbtn.danger{color:var(--red)} .sbtn.danger:hover{border-color:var(--red);box-shadow:0 0 8px rgba(255,77,109,.3)}
+  /* top bar */
+  .bar{display:flex;align-items:center;gap:16px;padding:10px 16px;border:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel),var(--panel2));border-radius:10px;position:relative;overflow:hidden}
+  .bar::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--neon);box-shadow:var(--glow)}
+  .brand{font-weight:700;letter-spacing:3px;font-size:16px;text-shadow:var(--glow)}
+  .brand b{color:var(--neon)}
+  .tag{color:var(--dim);letter-spacing:2px;font-size:10px;margin-top:2px}
+  .spacer{flex:1}
+  .stat{display:flex;flex-direction:column;line-height:1.25}
+  .stat .k{color:var(--dim);font-size:9px;letter-spacing:2px}
+  .stat .v{color:var(--neon2);font-size:14px}
+  .pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:20px;background:var(--input)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
+  .dot.live{background:var(--neon);box-shadow:0 0 10px var(--neon);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .icon{cursor:pointer;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:var(--input);user-select:none}
+  .icon:hover{color:var(--neon);border-color:var(--neon)}
+  /* main grid */
+  .main{display:grid;grid-template-columns:minmax(420px,1fr) 1.15fr;gap:10px;min-height:0}
+  .panel{border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border-radius:10px;position:relative;min-height:0;display:flex;flex-direction:column}
+  .ph{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);
+    color:var(--neon);letter-spacing:2px;font-size:10px}
+  .ph .n{margin-left:auto;color:var(--dim)}
+  .ph.plain::before{content:"▶";color:var(--neon);font-size:8px}
+  /* tabs */
+  .tabs{display:flex;gap:2px;padding:6px 8px 0}
+  .tab{padding:7px 14px;border:1px solid var(--line);border-bottom:none;border-radius:7px 7px 0 0;
+    color:var(--dim);letter-spacing:2px;font-size:10px;cursor:pointer;background:var(--input)}
+  .tab .c{color:var(--dim);margin-left:6px}
+  .tab.on{color:var(--neon);border-color:var(--neon);background:var(--panel)}
+  .tab.on .c{color:var(--neon2)}
+  .tabline{height:1px;background:var(--line);margin-top:-1px}
+  /* radar */
+  #radarWrap{flex:1;position:relative;min-height:0}
+  #radar{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+  .rlabel{position:absolute;left:12px;bottom:10px;color:var(--dim);font-size:9px;letter-spacing:1px;pointer-events:none}
+  /* tables */
+  .tbl{flex:1;overflow:auto}
+  table{width:100%;border-collapse:collapse}
+  thead th{position:sticky;top:0;background:var(--panel2);color:var(--dim);text-align:left;
+    font-weight:400;font-size:9px;letter-spacing:2px;padding:8px 10px;border-bottom:1px solid var(--line);z-index:1}
+  tbody td{padding:7px 10px;border-bottom:1px solid var(--rowline);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--hover)}
+  tbody tr.fresh{animation:flash 1.6s ease-out}
+  @keyframes flash{0%{background:rgba(0,255,195,.30)}100%{background:transparent}}
+  .ip{color:var(--neon2)} .mac{color:var(--dim);font-size:11px} .gw{color:var(--amber)}
+  .muted{color:var(--dim)}
+  .badge{display:inline-block;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--violet);font-size:10px}
+  .rssi{color:var(--amber)}
+  .enc{color:var(--red)} .enc.open{color:var(--neon)}
+  .hs{color:var(--neon);font-weight:700}
+  /* bottom */
+  /* intel row */
+  .intel{display:grid;grid-template-columns:1.7fr 1fr;gap:10px;height:170px}
+  .abody{flex:1;overflow:auto;padding:12px 16px;font-size:12.5px;line-height:1.65}
+  .asent{color:var(--txt)} .asent b{color:var(--neon2)}
+  .abody .warn{color:var(--red);font-weight:700} .abody .rec{color:var(--amber);font-weight:700;letter-spacing:1px}
+  .abody.analyzing{opacity:.4;transition:opacity .15s}
+  #aiRefresh.spin{animation:spin .6s linear}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .foot{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;height:210px}
+  /* router link card */
+  .link{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:12px 16px}
+  .node{display:flex;align-items:baseline;gap:10px}
+  .node .nlabel{font-size:9px;letter-spacing:2px;color:var(--dim);min-width:82px}
+  .node .nip{font-size:16px;color:var(--neon2)} .node .nip.gw{color:var(--amber)}
+  .node .nmac{font-size:10px;color:var(--dim)}
+  .flow{margin:2px 0 2px 82px;display:flex;flex-direction:column;gap:4px}
+  .frow{display:flex;align-items:center;gap:10px;font-size:11px}
+  .frow .dir{letter-spacing:1px;min-width:110px}
+  .frow .dir.up{color:var(--neon2)} .frow .dir.dn{color:var(--neon)}
+  .frow .fval{color:var(--txt);font-size:13px}
+  .wire{height:14px;border-left:2px dashed var(--line);margin-left:6px;position:relative}
+  .lnote{font-size:9px;color:var(--dim);margin-top:6px;line-height:1.4}
+  .lnote b{color:var(--amber)}
+  .spark{position:relative;height:40px;margin-top:8px;border-top:1px solid var(--line);padding-top:4px}
+  .spark canvas{width:100%;height:100%;display:block}
+  .sparklabel{position:absolute;top:5px;right:2px;font-size:10px;color:var(--dim)}
+  .sparklabel .u{color:var(--neon2)} .sparklabel .d{color:var(--neon)}
+  /* MITM button in drawer */
+  .cmd.mitm{background:linear-gradient(135deg,rgba(255,77,109,.16),rgba(165,107,255,.16));border-color:var(--red);
+    color:#fff;font-size:13px;font-weight:700;padding:13px;justify-content:space-between}
+  .cmd.mitm:hover{box-shadow:0 0 16px rgba(255,77,109,.4);background:linear-gradient(135deg,rgba(255,77,109,.24),rgba(165,107,255,.22))}
+  .cmd.mitm .run{color:var(--red)}
+  .mitmstop{width:100%;margin:6px 0 2px;padding:10px;background:transparent;border:1px solid var(--line);
+    color:var(--dim);border-radius:6px;font-family:inherit;letter-spacing:1px;cursor:pointer;font-size:11px}
+  .mitmstop:hover{border-color:var(--red);color:var(--red);box-shadow:0 0 10px rgba(255,77,109,.2)}
+  /* scanner modal */
+  .scan-modal{position:fixed;inset:0;z-index:110;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center}
+  .scan-modal.on{display:flex}
+  .scan-card{width:min(880px,94vw);height:min(600px,90vh);background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--neon);border-radius:12px;box-shadow:0 0 50px rgba(0,255,195,.2);display:flex;flex-direction:column;overflow:hidden}
+  .scan-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);color:var(--neon);letter-spacing:2px}
+  .scan-head .x{margin-left:auto;cursor:pointer;color:var(--dim);font-size:18px}.scan-head .x:hover{color:var(--red)}
+  .scan-ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
+  .scan-ctrl label{font-size:9px;letter-spacing:2px;color:var(--dim)}
+  .scan-ctrl input,.scan-ctrl select{background:var(--input);border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px}
+  .scan-ctrl input.tgt{min-width:180px} .scan-ctrl input.port{width:78px}
+  .scan-status{margin-left:auto;font-size:11px;color:var(--dim)} .scan-status b{color:var(--neon)}
+  .scan-body{flex:1;overflow:auto;padding:0}
+  .scan-body table{width:100%}
+  .scan-body thead th{background:var(--panel2)}
+  .host-hdr td{background:var(--input)!important;color:var(--amber);letter-spacing:2px;font-size:10px;padding:8px 12px;border-top:1px solid var(--line)}
+  .pt{color:var(--neon2);font-weight:700} .svc{color:var(--neon)} .ban{color:var(--dim);font-size:11px}
+  .scan-empty{display:flex;height:100%;align-items:center;justify-content:center;color:var(--dim);flex-direction:column;gap:6px;text-align:center;padding:24px}
+  .feed{flex:1;overflow:auto;padding:6px 12px;font-size:12px}
+  .ev{padding:3px 0;border-bottom:1px solid var(--rowline);display:flex;gap:10px;animation:slidein .3s}
+  @keyframes slidein{from{opacity:0;transform:translateX(-6px)}to{opacity:1}}
+  .ev .t{color:var(--dim);font-size:10px;min-width:64px}
+  .ev .tagn{min-width:150px}
+  .ev .msg{opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tg-new{color:var(--neon)} .tg-lost{color:var(--red)} .tg-sys{color:var(--neon2)} .tg-wifi{color:var(--violet)} .tg-mod{color:var(--amber)}
+  .meters{padding:12px;display:flex;flex-direction:column;gap:12px}
+  .meter .top{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);letter-spacing:1px}
+  .meter .top b{color:var(--neon2);font-size:14px}
+  .track{height:8px;border:1px solid var(--line);border-radius:6px;background:var(--input);overflow:hidden;margin-top:5px}
+  .fill{height:100%;width:0;border-radius:6px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+  .fill.tx{background:linear-gradient(90deg,transparent,var(--neon2));box-shadow:0 0 10px var(--neon2)}
+  .fill.rx{background:linear-gradient(90deg,transparent,var(--neon));box-shadow:0 0 10px var(--neon)}
+  .protos{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+  .proto{padding:3px 8px;border:1px solid var(--line);border-radius:5px;font-size:10px}
+  .proto b{color:var(--amber)}
+  /* drawer */
+  .drawer{position:fixed;top:0;right:0;height:100vh;width:400px;max-width:92vw;z-index:95;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));border-left:1px solid var(--neon);
+    box-shadow:-20px 0 50px rgba(0,0,0,.5);transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column}
+  .drawer.on{transform:translateX(0)}
+  .dh{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);color:var(--neon);letter-spacing:2px}
+  .dh .x{margin-left:auto;cursor:pointer;color:var(--dim);font-size:16px}
+  .dh .x:hover{color:var(--red)}
+  .db{padding:14px 16px;overflow:auto}
+  .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:12px;margin-bottom:14px}
+  .kv .k{color:var(--dim);letter-spacing:1px}
+  .kv .v{word-break:break-all}
+  .sect{color:var(--amber);letter-spacing:2px;font-size:10px;margin:6px 0 8px;border-top:1px dashed var(--line);padding-top:12px}
+  .chip{display:inline-block;padding:2px 8px;border:1px solid var(--line);border-radius:5px;margin:0 4px 4px 0;font-size:11px}
+  .cmd{display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--line);border-radius:6px;
+    padding:8px 10px;color:var(--neon);font-size:11px;margin:4px 0;white-space:pre-wrap;word-break:break-all;cursor:pointer;transition:border-color .15s,background .15s}
+  .cmd:hover{border-color:var(--neon);background:rgba(0,255,195,.06)}
+  .cmd .run{margin-left:auto;flex:none;font-size:10px;letter-spacing:1px;color:var(--dim)}
+  .cmd:hover .run{color:var(--neon)}
+  .cmd.danger{color:var(--red)} .cmd.danger:hover{border-color:var(--red);background:rgba(255,77,109,.07)}
+  .cmd.danger:hover .run{color:var(--red)}
+  .cmd .txt{flex:1;overflow:hidden;text-overflow:ellipsis}
+  /* channel chart */
+  #wifiChart{flex:none;height:130px;border-bottom:1px solid var(--line);position:relative;padding:6px 4px 2px}
+  #wifiChart canvas{width:100%;height:100%;display:block}
+  .clegend{position:absolute;top:6px;right:12px;display:flex;gap:12px;font-size:9px;color:var(--dim);letter-spacing:1px}
+  .clegend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .ctitle{position:absolute;top:6px;left:12px;font-size:9px;color:var(--dim);letter-spacing:2px}
+  /* toast */
+  #toasts{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:120;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .toast{background:var(--panel);border:1px solid var(--neon);border-left-width:3px;border-radius:8px;padding:10px 16px;
+    font-size:12px;color:var(--txt);box-shadow:0 6px 24px rgba(0,0,0,.5);animation:tin .25s;max-width:70vw}
+  .toast.err{border-color:var(--red)} .toast.warn{border-color:var(--amber)}
+  .toast b{color:var(--neon)} .toast.err b{color:var(--red)}
+  @keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+  /* modal */
+  .modal{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center}
+  .modal.on{display:flex}
+  .card{width:360px;background:var(--panel);border:1px solid var(--neon);border-radius:12px;padding:20px;box-shadow:0 0 40px rgba(0,255,195,.25)}
+  .card h3{margin:0 0 14px;color:var(--neon);letter-spacing:2px;font-size:13px}
+  .card label{display:block;color:var(--dim);font-size:10px;letter-spacing:1px;margin:10px 0 4px}
+  .card input{width:100%;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:6px;font-family:inherit;font-size:13px}
+  .card input:focus{outline:none;border-color:var(--neon)}
+  .card .row{display:flex;gap:10px;margin-top:16px}
+  .btn{flex:1;padding:9px;border:1px solid var(--neon);background:transparent;color:var(--neon);border-radius:6px;font-family:inherit;letter-spacing:1px;cursor:pointer}
+  .btn:hover{background:var(--neon);color:var(--bg)}
+  .btn.sec{border-color:var(--line);color:var(--dim)}
+  .empty{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;color:var(--dim);text-align:center;padding:20px}
+  .empty .big{font-size:13px;letter-spacing:2px;color:var(--amber)}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  /* ===== app shell (sidebar nav) ===== */
+  .shell{display:grid;grid-template-columns:190px 1fr;height:100vh}
+  .sidebar{display:flex;flex-direction:column;padding:14px 12px;border-right:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel),var(--panel2));position:relative;z-index:2}
+  .side-brand{font-weight:700;letter-spacing:2px;font-size:13px;line-height:1.45;color:var(--txt);text-shadow:var(--glow);margin-bottom:16px}
+  .side-brand b{color:var(--neon)}
+  .nav{display:flex;flex-direction:column;gap:4px;flex:1}
+  .navb{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid transparent;border-radius:8px;
+    background:transparent;color:var(--dim);font-family:inherit;font-size:11px;letter-spacing:2px;cursor:pointer;text-align:left;transition:all .15s}
+  .navb:hover{color:var(--txt);background:var(--input)}
+  .navb.on{color:var(--neon);border-color:var(--line);background:var(--input);box-shadow:inset 3px 0 0 var(--neon)}
+  .navb .nc{margin-left:auto;color:var(--dim);font-size:10px;background:var(--bg);padding:1px 6px;border-radius:8px}
+  .navb.on .nc{color:var(--neon2)}
+  .side-foot{display:flex;flex-direction:column;gap:8px}
+  .content{display:flex;flex-direction:column;min-width:0;height:100vh;padding:12px;gap:10px}
+  .topbar{display:flex;align-items:center;gap:14px;padding:9px 14px;border:1px solid var(--line);border-radius:10px;
+    background:linear-gradient(180deg,var(--panel),var(--panel2))}
+  .topbar input:focus{outline:none;border-color:var(--neon);box-shadow:0 0 8px rgba(0,255,195,.25)}
+  .viewport{flex:1;min-height:0;position:relative}
+  .view{position:absolute;inset:0;display:none}
+  .view.on{display:grid;gap:10px}
+  #view-overview{grid-template-columns:1.5fr 1fr;grid-template-rows:1fr 1fr}
+  #view-overview .radarpanel{grid-column:1;grid-row:1 / span 2}
+  #view-hosts{grid-template-columns:1fr;grid-template-rows:1fr}
+  #view-traffic{grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr) minmax(0,1.25fr)}
+  #view-traffic .eventspanel{grid-column:1 / span 2;min-height:0}
+  /* demo badge + about overlay */
+  .demobadge{display:none;align-items:center;gap:8px;padding:5px 12px;border:1px solid var(--amber);border-radius:20px;
+    background:rgba(255,207,77,.08);color:var(--amber);font-size:10px;letter-spacing:1px;cursor:pointer;white-space:nowrap}
+  .demobadge.on{display:flex}
+  .demobadge:hover{box-shadow:0 0 10px rgba(255,207,77,.3)}
+  .demobadge .d{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 1.6s infinite}
+  .about-modal{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;padding:20px}
+  .about-modal.on{display:flex}
+  .about-card{width:min(840px,96vw);max-height:92vh;overflow:auto;background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--neon);border-radius:14px;box-shadow:0 0 60px rgba(0,255,195,.22)}
+  .about-hero{padding:26px 28px 18px;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
+  .about-hero::before{content:"";position:absolute;inset:0;background:radial-gradient(500px 200px at 80% -40%,rgba(0,229,255,.16),transparent 60%);pointer-events:none}
+  .about-hero h1{margin:0;font-size:21px;letter-spacing:3px;color:var(--neon);text-shadow:var(--glow)}
+  .about-hero .sub{color:var(--txt);margin-top:8px;font-size:13px;opacity:.88;line-height:1.55;max-width:660px}
+  .about-hero .x{position:absolute;top:18px;right:22px;cursor:pointer;color:var(--dim);font-size:20px}
+  .about-hero .x:hover{color:var(--red)}
+  .about-body{padding:20px 28px 28px}
+  .about-body h2{font-size:11px;letter-spacing:2px;color:var(--amber);margin:22px 0 10px;border-top:1px dashed var(--line);padding-top:16px}
+  .about-body h2:first-child{border-top:none;margin-top:0;padding-top:0}
+  .about-body p{font-size:13px;line-height:1.62;color:var(--txt);opacity:.9;margin:0 0 10px}
+  .pillrow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .ptag{padding:3px 9px;border:1px solid var(--line);border-radius:6px;font-size:11px;color:var(--txt)}
+  .ptag.red{border-color:var(--red);color:var(--red)} .ptag.blue{border-color:var(--neon2);color:var(--neon2)}
+  .about-steps{display:flex;flex-direction:column;gap:7px}
+  .about-steps .s{display:flex;gap:10px;font-size:12.5px;line-height:1.5;color:var(--txt);opacity:.92}
+  .about-steps .s .n{color:var(--neon);font-weight:700;min-width:16px}
+  .about-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+  .about-links a{padding:9px 14px;border:1px solid var(--neon);color:var(--neon);border-radius:8px;text-decoration:none;font-size:12px;letter-spacing:1px}
+  .about-links a:hover{background:var(--neon);color:var(--bg)}
+  .navb.about{color:var(--amber)} .navb.about:hover{background:var(--input)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="side-brand"><b>◈</b> bettercap<br>RECON&nbsp;CONSOLE</div>
+    <nav class="nav">
+      <button class="navb on" data-view="overview">▚ OVERVIEW</button>
+      <button class="navb" data-view="hosts">☰ HOSTS <span class="nc" id="navHosts">0</span></button>
+      <button class="navb" data-view="traffic">≈ TRAFFIC</button>
+      <button class="navb" data-view="scanner">⌗ SCANNER</button>
+      <div style="flex:1"></div>
+      <button class="navb about" id="aboutBtn">ⓘ ABOUT PROJECT</button>
+    </nav>
+    <div class="side-foot">
+      <div class="pill"><span class="dot" id="conDot"></span><span id="conTxt">OFFLINE</span></div>
+      <button class="sbtn danger" id="panicBtn" style="width:100%">⏻ STOP ALL</button>
+      <div style="display:flex;gap:6px">
+        <div class="icon" id="themeBtn" title="toggle theme" style="flex:1;text-align:center">☀</div>
+        <div class="icon" id="gear" style="flex:1;text-align:center">⚙ CFG</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="content">
+    <div class="topbar">
+      <div style="min-width:150px">
+        <div class="brand" style="font-size:12px;letter-spacing:2px">◈ RECON CONSOLE</div>
+        <div class="tag" id="ifaceLine">INTERFACE —</div>
+      </div>
+      <div class="stat"><span class="k">HOSTS</span><span class="v" id="sHosts">0</span></div>
+      <div class="stat"><span class="k">GATEWAY</span><span class="v gw" id="sGw">—</span></div>
+      <div class="stat"><span class="k">UPTIME</span><span class="v" id="sUp">00:00:00</span></div>
+      <div class="demobadge" id="demoBadge" title="About this project"><span class="d"></span>PORTFOLIO DEMO · SYNTHETIC DATA · ⓘ</div>
+      <span style="color:var(--neon);font-weight:700;margin-left:6px">›</span>
+      <input id="cmdBar" placeholder="type any bettercap command + Enter   ·   help   ·   net.show" spellcheck="false" autocomplete="off"
+        style="flex:1;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:9px 12px;border-radius:7px;font-family:inherit;font-size:13px">
+      <button class="sbtn" id="scanBtn">⌗ SCAN</button>
+    </div>
+
+    <div class="viewport">
+      <!-- ===== OVERVIEW ===== -->
+      <section class="view on" id="view-overview">
+        <div class="panel radarpanel">
+          <div class="ph plain">SONAR — LAN SWEEP <span class="n" id="radarCount">0 CONTACTS</span></div>
+          <div id="radarWrap"><canvas id="radar"></canvas><div class="rlabel" id="rlabel">SCANNING…</div></div>
+        </div>
+        <div class="panel">
+          <div class="ph plain">◇ AI ANALYZER
+            <span class="n" id="aiTime" style="margin-right:10px"></span>
+            <span class="icon" id="aiRefresh" style="padding:3px 8px">⟳</span>
+          </div>
+          <div class="abody" id="aiBody"><span class="muted">Awaiting data…</span></div>
+        </div>
+        <div class="panel">
+          <div class="ph plain">ROUTER / ISP INTEL
+            <span class="icon" id="ispRefresh" style="margin-left:auto;padding:3px 8px">⟳ LOOKUP</span>
+          </div>
+          <div class="abody" id="ispBody"><span class="muted">—</span></div>
+        </div>
+      </section>
+
+      <!-- ===== HOSTS ===== -->
+      <section class="view" id="view-hosts">
+        <div class="panel">
+          <div class="tabs">
+            <div class="tab on" data-tab="lan">LAN <span class="c" id="cLan">0</span></div>
+            <div class="tab" data-tab="wifi">WIFI <span class="c" id="cWifi">0</span></div>
+            <div class="tab" data-tab="ble">BLE <span class="c" id="cBle">0</span></div>
+          </div>
+          <div class="tabline"></div>
+          <div class="tbl" id="tblHost">
+            <table><thead><tr><th>IPv4</th><th>MAC</th><th>VENDOR</th><th>HOSTNAME</th><th>SEEN</th></tr></thead>
+            <tbody id="rowsLan"></tbody></table>
+          </div>
+          <div id="tblWifi" style="display:none;flex:1;min-height:0;flex-direction:column">
+            <div id="wifiChart">
+              <div class="ctitle">CHANNEL ACTIVITY</div>
+              <div class="clegend"><span><i style="background:var(--neon2)"></i>2.4 GHz</span><span><i style="background:var(--violet)"></i>5 GHz</span></div>
+              <canvas id="chanCv"></canvas>
+            </div>
+            <div class="tbl">
+              <table><thead><tr><th>ESSID</th><th>BSSID</th><th>CH</th><th>RSSI</th><th>ENC</th><th>CL</th><th>HS</th></tr></thead>
+              <tbody id="rowsWifi"></tbody></table>
+            </div>
+          </div>
+          <div class="tbl" id="tblBle" style="display:none">
+            <table><thead><tr><th>NAME</th><th>MAC</th><th>VENDOR</th><th>RSSI</th><th>CONN</th><th>SEEN</th></tr></thead>
+            <tbody id="rowsBle"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== TRAFFIC ===== -->
+      <section class="view" id="view-traffic">
+        <div class="panel">
+          <div class="ph plain">ROUTER ⇄ ENDPOINT LINK</div>
+          <div class="link" id="linkCard">
+            <div class="node"><span class="nlabel">ROUTER</span><span class="nip gw" id="lkGwIp">—</span><span class="nmac" id="lkGwMac"></span></div>
+            <div class="flow">
+              <div class="frow"><span class="dir up">▲ TO ROUTER</span><span class="fval" id="lkUp">0 B</span></div>
+              <div class="wire"><span class="pulse" id="lkPulse"></span></div>
+              <div class="frow"><span class="dir dn">▼ FROM ROUTER</span><span class="fval" id="lkDn">0 B</span></div>
+            </div>
+            <div class="node"><span class="nlabel">THIS DEVICE</span><span class="nip" id="lkMeIp">—</span><span class="nmac" id="lkMeMac"></span></div>
+            <div class="spark"><span class="sparklabel" id="rateLbl"></span><canvas id="rateCv"></canvas></div>
+            <div class="lnote" id="lkNote">passive view — run <b>net.sniff</b> or <b>arp.spoof</b> to see full router↔device traffic</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="ph plain">TRAFFIC TELEMETRY</div>
+          <div class="meters">
+            <div class="meter"><div class="top"><span>▲ TX SENT</span><b id="txv">0 B</b></div><div class="track"><div class="fill tx" id="txf"></div></div></div>
+            <div class="meter"><div class="top"><span>▼ RX RECEIVED</span><b id="rxv">0 B</b></div><div class="track"><div class="fill rx" id="rxf"></div></div></div>
+            <div class="meter"><div class="top"><span>PACKETS CAPTURED</span><b id="pkts">0</b></div></div>
+          </div>
+          <div class="protos" id="protos"></div>
+        </div>
+        <div class="panel eventspanel">
+          <div class="ph plain">EVENT STREAM <span class="n" id="evCount">0</span></div>
+          <div class="feed" id="feed"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- DETAIL DRAWER -->
+<div class="drawer" id="drawer">
+  <div class="dh"><span id="dTitle">DETAIL</span><span class="x" id="dClose">✕</span></div>
+  <div class="db" id="dBody"></div>
+</div>
+
+<!-- PORT SCANNER (Zenmap-style) -->
+<div class="scan-modal" id="scanModal">
+  <div class="scan-card">
+    <div class="scan-head">⌗ PORT SCANNER <span style="color:var(--dim);font-size:10px;letter-spacing:1px">· bettercap syn.scan</span><span class="x" id="scanClose">✕</span></div>
+    <div class="scan-ctrl">
+      <label>TARGET</label>
+      <input class="tgt" id="scanTarget" placeholder="192.168.1.10 or 192.168.1.1-50" list="scanHosts">
+      <datalist id="scanHosts"></datalist>
+      <label>PORTS</label>
+      <select id="scanPreset">
+        <option value="1-1024">Well-known 1-1024</option>
+        <option value="1-10000" selected>Common 1-10000</option>
+        <option value="1-65535">Full 1-65535</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <input class="port" id="scanStart" value="1" style="display:none">
+      <input class="port" id="scanEnd" value="1024" style="display:none">
+      <button class="sbtn" id="scanGo">▶ SCAN</button>
+      <button class="sbtn danger" id="scanStop">■ STOP</button>
+      <span class="scan-status" id="scanStatus">idle</span>
+    </div>
+    <div class="scan-body" id="scanBody">
+      <div class="scan-empty"><div>No scan results yet.</div><div style="font-size:11px">Pick a target and hit SCAN — open ports appear here as bettercap finds them.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ABOUT / CASE STUDY -->
+<div class="about-modal" id="aboutModal">
+  <div class="about-card">
+    <div class="about-hero">
+      <span class="x" id="aboutClose">✕</span>
+      <h1>◈ RECON CONSOLE</h1>
+      <div class="sub">A real-time LAN reconnaissance &amp; network-monitoring console built on <b>bettercap</b> — live host discovery, wireless &amp; BLE mapping, MITM-based traffic interception, a syn-scan port scanner, and an on-device analyzer, all in one operator UI. <b>You're viewing the live synthetic demo</b> — the production tool runs against a real network via a local capture engine.</div>
+    </div>
+    <div class="about-body">
+      <h2>WHAT IT DOES</h2>
+      <p>Polls a local capture engine (bettercap's REST API) to render a live operations picture: a sonar radar of discovered hosts, per-device drill-down with vendor/OS/open-port intel, a WiFi channel-activity chart, router↔endpoint link telemetry with a live bytes/sec graph, a Zenmap-style port scanner, and one-click scoped actions (ARP-spoof + filtered sniff) for authorized MITM diagnostics. An on-device heuristic analyzer writes a plain-English risk assessment — no data leaves the box.</p>
+
+      <h2>ARCHITECTURE</h2>
+      <div class="about-steps">
+        <div class="s"><span class="n">1</span><span><b>Capture / recon</b> — bettercap (Go) bound to the LAN adapter via Npcap; net.recon + net.probe for host discovery, syn.scan for ports.</span></div>
+        <div class="s"><span class="n">2</span><span><b>API</b> — bettercap's local REST API (basic-auth) exposes session, hosts, wifi/ble, per-IP traffic counters, and an events feed.</span></div>
+        <div class="s"><span class="n">3</span><span><b>UI</b> — a single self-contained HTML/JS console (zero framework, zero backend) polling every 2s; canvas radar &amp; charts, drill-down drawer, command bar.</span></div>
+        <div class="s"><span class="n">4</span><span><b>Roadmap</b> — offload deep packet analysis to Zeek/Suricata → Vector → ClickHouse, turning this into a home-grown SIEM with flow search, DNS/TLS-SNI logging, threat-intel enrichment, and phone alerting.</span></div>
+      </div>
+
+      <h2>SKILLS DEMONSTRATED</h2>
+      <div class="pillrow">
+        <span class="ptag red">Recon / Nmap-class scanning</span><span class="ptag red">MITM / ARP-spoof</span><span class="ptag red">WiFi/BLE recon</span><span class="ptag red">PenTest+</span>
+      </div>
+      <div class="pillrow">
+        <span class="ptag blue">Network monitoring</span><span class="ptag blue">Detection engineering</span><span class="ptag blue">MITRE ATT&amp;CK mapping</span><span class="ptag blue">SIEM design</span><span class="ptag blue">CySA+</span>
+      </div>
+      <div class="pillrow">
+        <span class="ptag">Go build-from-source (Windows/cgo)</span><span class="ptag">REST API integration</span><span class="ptag">Canvas data-viz</span><span class="ptag">PowerShell tooling</span><span class="ptag">On-device LLM/heuristics</span>
+      </div>
+
+      <h2>TECH</h2>
+      <p>bettercap · Npcap · Go/cgo · REST · vanilla HTML/JS/Canvas · PowerShell · (roadmap: Zeek · Suricata · Vector · ClickHouse · Grafana · ntfy)</p>
+
+      <h2>BUILT BY</h2>
+      <p>Terrill Hilliard — IT Support &amp; Security Operations · M.S. Cybersecurity · CySA+ / PenTest+ / ISC² CC</p>
+      <div class="about-links">
+        <a href="https://terrillhilliardresume.vercel.app" target="_blank" rel="noopener">RÉSUMÉ</a>
+        <a href="https://linkedin.com/in/terrill-hilliard-a989482b8/" target="_blank" rel="noopener">LINKEDIN</a>
+        <a href="mailto:terrillhilliard96@gmail.com">EMAIL</a>
+      </div>
+      <p style="margin-top:16px;font-size:11px;color:var(--dim)">⚖ Reconnaissance &amp; MITM features are for networks you own or are authorized to test. This public demo uses synthetic data only.</p>
+    </div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- CONFIRM DIALOG -->
+<div class="modal" id="confirm">
+  <div class="card">
+    <h3 id="cfTitle">◈ RUN COMMAND</h3>
+    <div style="color:var(--dim);font-size:11px;letter-spacing:1px;margin-bottom:6px">This will execute on the live bettercap session:</div>
+    <div class="cmd" id="cfCmd" style="cursor:default"></div>
+    <div id="cfWarn" style="display:none;color:var(--red);font-size:11px;margin-top:10px">⚠ OFFENSIVE MODULE — only run against networks you are authorized to test.</div>
+    <div class="row"><button class="btn sec" id="cfCancel">CANCEL</button><button class="btn" id="cfRun">EXECUTE</button></div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal" id="modal">
+  <div class="card">
+    <h3>◈ API LINK CONFIG</h3>
+    <label>REST API ENDPOINT</label><input id="mBase" placeholder="http://127.0.0.1:8081">
+    <label>USERNAME</label><input id="mUser" placeholder="admin">
+    <label>PASSWORD</label><input id="mPass" type="password" placeholder="bettercap">
+    <div class="row"><button class="btn sec" id="mCancel">CANCEL</button><button class="btn" id="mSave">CONNECT</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const LS="bettercap.dash.cfg", TKEY="bettercap.theme";
+const q=new URLSearchParams(location.search);
+// Portfolio/live detection: on localhost (served by bettercap) run LIVE; anywhere else
+// (Vercel/GitHub Pages/etc.) auto-run the synthetic DEMO so it's a safe public showcase.
+const _host=location.hostname;
+const _isLocal=_host===""||/^(localhost|127\.|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(_host);
+const DEMO = q.get("demo")==="1" || (!_isLocal && q.get("live")!=="1");
+const cfg=Object.assign({base:`http://${location.hostname||"127.0.0.1"}:8081`,user:"admin",pass:"bettercap"},
+  JSON.parse(localStorage.getItem(LS)||"{}"));
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const auth=()=>"Basic "+btoa(`${cfg.user}:${cfg.pass}`);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// helpers
+const fmtBytes=n=>{n=+n||0;const u=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return (i?n.toFixed(1):n)+" "+u[i];};
+const num=n=>(+n||0).toLocaleString();
+function ago(t){if(!t)return"—";const s=(Date.now()-new Date(t).getTime())/1000;if(s<0||!isFinite(s))return"now";if(s<60)return Math.floor(s)+"s";if(s<3600)return Math.floor(s/60)+"m";return Math.floor(s/3600)+"h";}
+function hhmmss(ms){ms=Math.max(0,ms);const s=Math.floor(ms/1000);const h=String(Math.floor(s/3600)).padStart(2,"0");const m=String(Math.floor(s%3600/60)).padStart(2,"0");const ss=String(s%60).padStart(2,"0");return `${h}:${m}:${ss}`;}
+function hash(str){let h=2166136261;for(let i=0;i<(str||"").length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function tagClass(t){t=t||"";if(t.includes("new"))return"tg-new";if(t.includes("lost"))return"tg-lost";if(t.startsWith("wifi"))return"tg-wifi";if(t.startsWith("mod"))return"tg-mod";return"tg-sys";}
+function evMsg(e){const d=e.data;if(d&&typeof d==="object"){if(d.ipv4||d.mac)return `${d.ipv4||""} ${d.hostname||d.vendor||d.mac||""}`.trim();if(d.essid||d.hostname)return d.essid||d.hostname;if(d.message||d.prompt)return d.message||d.prompt;}return typeof d==="string"?d:"";}
+
+// state
+let hosts=[], wifi=[], ble=[], gateway=null, iface=null, startedAt=null, online=false, curTab="lan", known=new Set();
+
+// theme
+function pal(){const c=getComputedStyle(document.documentElement);const g=n=>c.getPropertyValue(n).trim();
+  return{neon:g("--neon"),neon2:g("--neon2"),amber:g("--amber"),violet:g("--violet"),ring:g("--ring"),spoke:g("--spoke"),txt:g("--txt"),dim:g("--dim")};}
+let PAL;
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem(TKEY,t);$("#themeBtn").textContent=t==="light"?"☾":"☀";PAL=pal();}
+setTheme(localStorage.getItem(TKEY)||"dark");
+$("#themeBtn").onclick=()=>{setTheme(document.documentElement.getAttribute("data-theme")==="light"?"dark":"light");if(curTab==="wifi")drawChannels();};
+
+// fetch
+async function api(p){const r=await fetch(cfg.base+p,{headers:{Authorization:auth()},cache:"no-store"});if(!r.ok)throw new Error(r.status);return r.json();}
+async function poll(){
+  if(DEMO)return demoTick();
+  try{
+    const s=await api("/api/session"); online=true; setConn(true);
+    // NOTE: /api/session marshals with lowercase keys (interface/lan/wifi/ble/packets/started_at)
+    iface=s.interface||null; gateway=s.gateway||null;
+    hosts=(s.lan&&s.lan.hosts)||[];
+    wifi=(s.wifi&&s.wifi.aps)||[];
+    ble=(s.ble&&s.ble.devices)||[];
+    startedAt=s.started_at?new Date(s.started_at).getTime():startedAt;
+    const st=(s.packets&&s.packets.stats)||{};
+    trafficMap=(s.packets&&s.packets.traffic)||{};
+    renderTraffic(st.sent,st.received,st.pkts_received,(s.packets&&s.packets.protos)||{});
+    renderTop(); renderAll();
+    try{renderEvents(await api("/api/events")||[]);}catch(_){}
+  }catch(e){online=false;setConn(false);}
+}
+function setConn(up){$("#conDot").className="dot"+(up?" live":"");$("#conTxt").textContent=up?"LINK ACTIVE":"OFFLINE";
+  if(!up)$("#rlabel").textContent="NO SIGNAL — is bettercap running with api.rest + http.server?";}
+
+function renderTop(){
+  $("#sHosts").textContent=hosts.length; $("#radarCount").textContent=hosts.length+" CONTACTS";
+  $("#cLan").textContent=hosts.length; $("#cWifi").textContent=wifi.length; $("#cBle").textContent=ble.length;
+  {const _nh=document.getElementById("navHosts");if(_nh)_nh.textContent=hosts.length;}
+  $("#sGw").textContent=gateway?gateway.ipv4:"—";
+  $("#ifaceLine").textContent=iface?`INTERFACE ${iface.ipv4||"?"}  ·  ${(iface.mac||"").toUpperCase()}  ·  ${iface.hostname||""}`:"INTERFACE —";
+  if(startedAt)$("#sUp").textContent=hhmmss(Date.now()-startedAt);
+  renderLink();
+}
+function renderAll(){renderLan();renderWifi();renderBle();renderAnalysis();renderISP();if($("#scanModal").classList.contains("on"))renderScan();}
+
+function emptyRow(cols,msg){return `<tr><td colspan="${cols}"><div class="empty"><div class="big">${msg}</div></div></td></tr>`;}
+
+function renderLan(){
+  const rows=$("#rowsLan"); const gwMac=gateway&&gateway.mac;
+  const list=[...hosts].sort((a,b)=>new Date(b.last_seen)-new Date(a.last_seen));
+  if(!list.length){rows.innerHTML=emptyRow(5,"NO HOSTS YET — probing…");known=new Set();return;}
+  rows.innerHTML="";
+  for(const h of list){
+    const tr=document.createElement("tr");
+    if(h.mac&&!known.has(h.mac))tr.className="fresh";
+    tr.onclick=()=>openHost(h.mac);
+    const gw=h.mac===gwMac;
+    tr.innerHTML=`<td class="ip">${esc(h.ipv4)||"—"} ${gw?'<span class="badge">GW</span>':''}</td>
+      <td class="mac">${esc((h.mac||"").toUpperCase())}</td>
+      <td>${esc(h.vendor)||'<span class="muted">unknown</span>'}</td>
+      <td>${esc(h.hostname||h.alias)||"—"}</td><td>${ago(h.last_seen)}</td>`;
+    rows.appendChild(tr);
+  }
+  known=new Set(hosts.map(h=>h.mac));
+}
+function renderWifi(){
+  const rows=$("#rowsWifi"); drawChannels();
+  if(!wifi.length){rows.innerHTML=emptyRow(7,"NO WIFI — enable wifi.recon (needs monitor-mode adapter)");return;}
+  rows.innerHTML="";
+  for(const ap of [...wifi].sort((a,b)=>(b.rssi||-999)-(a.rssi||-999))){
+    const enc=ap.encryption||"OPEN"; const open=/open|^$/i.test(enc);
+    const tr=document.createElement("tr"); tr.onclick=()=>openWifi(ap.mac);
+    tr.innerHTML=`<td>${esc(ap.hostname||ap.essid||'<span class="muted">&lt;hidden&gt;</span>')}</td>
+      <td class="mac">${esc((ap.mac||"").toUpperCase())}</td><td>${ap.channel||"—"}</td>
+      <td class="rssi">${ap.rssi!=null?ap.rssi+"dBm":"—"}</td>
+      <td class="enc ${open?"open":""}">${esc(open?"OPEN":enc)}</td>
+      <td>${(ap.clients&&ap.clients.length)||0}</td>
+      <td>${ap.handshake?'<span class="hs">✓</span>':"—"}</td>`;
+    rows.appendChild(tr);
+  }
+}
+function renderBle(){
+  const rows=$("#rowsBle");
+  if(!ble.length){rows.innerHTML=emptyRow(6,"NO BLE — enable ble.recon (needs BLE adapter)");return;}
+  rows.innerHTML="";
+  for(const d of [...ble].sort((a,b)=>(b.rssi||-999)-(a.rssi||-999))){
+    const tr=document.createElement("tr"); tr.onclick=()=>openBle(d.mac);
+    tr.innerHTML=`<td>${esc(d.name)||'<span class="muted">&lt;unknown&gt;</span>'}</td>
+      <td class="mac">${esc((d.mac||"").toUpperCase())}</td><td>${esc(d.vendor)||'<span class="muted">—</span>'}</td>
+      <td class="rssi">${d.rssi!=null?d.rssi+"dBm":"—"}</td>
+      <td>${d.connectable?'<span class="hs">yes</span>':"no"}</td><td>${ago(d.last_seen)}</td>`;
+    rows.appendChild(tr);
+  }
+}
+let evList=[];
+function renderEvents(ev){
+  evList=ev.slice(-60); const feed=$("#feed"); feed.innerHTML="";
+  for(const e of evList){const div=document.createElement("div");div.className="ev";
+    const t=new Date(e.time);const ts=isNaN(t)?"":t.toLocaleTimeString();
+    div.innerHTML=`<span class="t">${ts}</span><span class="tagn ${tagClass(e.tag)}">${esc(e.tag)}</span><span class="msg">${esc(evMsg(e))}</span>`;
+    feed.appendChild(div);}
+  feed.scrollTop=feed.scrollHeight; $("#evCount").textContent=evList.length;
+}
+let peakTx=1,peakRx=1;
+function renderTraffic(tx,rx,pk,protos){
+  tx=+tx||0;rx=+rx||0;peakTx=Math.max(peakTx,tx);peakRx=Math.max(peakRx,rx);
+  $("#txv").textContent=fmtBytes(tx);$("#rxv").textContent=fmtBytes(rx);
+  $("#txf").style.width=(100*tx/peakTx)+"%";$("#rxf").style.width=(100*rx/peakRx)+"%";
+  $("#pkts").textContent=num(pk);
+  const box=$("#protos");box.innerHTML="";
+  for(const [k,v] of Object.entries(protos||{}).sort((a,b)=>b[1]-a[1]).slice(0,10)){
+    const s=document.createElement("span");s.className="proto";s.innerHTML=`${esc(k)} <b>${num(v)}</b>`;box.appendChild(s);}
+}
+
+// tabs
+$$(".tab").forEach(t=>t.onclick=()=>{
+  $$(".tab").forEach(x=>x.classList.remove("on")); t.classList.add("on"); curTab=t.dataset.tab;
+  $("#tblHost").style.display=curTab==="lan"?"":"none";
+  $("#tblWifi").style.display=curTab==="wifi"?"flex":"none";
+  $("#tblBle").style.display=curTab==="ble"?"":"none";
+  if(curTab==="wifi")drawChannels();
+});
+
+// ---- drill-down drawer ----
+const drawer=$("#drawer");
+function showDrawer(title,html){$("#dTitle").textContent=title;$("#dBody").innerHTML=html;drawer.classList.add("on");}
+$("#dClose").onclick=()=>drawer.classList.remove("on");
+document.addEventListener("keydown",e=>{if(e.key==="Escape")drawer.classList.remove("on");});
+function kv(pairs){return `<div class="kv">${pairs.filter(p=>p[1]!=null&&p[1]!=="").map(p=>`<div class="k">${esc(p[0])}</div><div class="v">${p[1]}</div>`).join("")}</div>`;}
+function isDanger(c){return /arp\.spoof|deauth|dns\.spoof|\bhid\b|ble\.write|\.inject|krack|\bspoof\b|fake/i.test(c);}
+function cmdRow(c){c=c.trim();const d=isDanger(c);return `<div class="cmd${d?' danger':''}" data-cmd="${esc(c)}"><span class="txt">${esc(c)}</span><span class="run">▶ RUN</span></div>`;}
+function metaBlock(meta){
+  const v=meta&&meta.values; if(!v||!Object.keys(v).length)return "";
+  const rows=[];
+  for(const [k,val] of Object.entries(v)){
+    if(k==="ports"&&val&&typeof val==="object"){
+      const ps=Object.values(val).map(p=>`<span class="chip">${esc((p.port||"")+"/"+(p.proto||"tcp"))}${p.service?" "+esc(p.service):""}</span>`).join("");
+      rows.push(["open ports",ps]); continue;
+    }
+    rows.push([k,esc(typeof val==="object"?JSON.stringify(val):val)]);
+  }
+  return `<div class="sect">META / SERVICES</div><div class="kv">${rows.map(r=>`<div class="k">${esc(r[0])}</div><div class="v">${r[1]}</div>`).join("")}</div>`;
+}
+async function openHost(mac){
+  let h=hosts.find(x=>x.mac===mac)||{mac};
+  if(!DEMO){try{h=await api("/api/session/lan/"+encodeURIComponent(mac))||h;}catch(_){}}
+  const gw=gateway&&gateway.mac===mac;
+  const body=kv([
+    ["IPv4",`<span class="ip">${esc(h.ipv4)}</span> ${gw?'<span class="badge">GATEWAY</span>':""}`],
+    ["IPv6",esc(h.ipv6)],["MAC",esc((h.mac||"").toUpperCase())],["Vendor",esc(h.vendor)],
+    ["Hostname",esc(h.hostname)],["Alias",esc(h.alias)],
+    ["First seen",h.first_seen?new Date(h.first_seen).toLocaleString():""],
+    ["Last seen",h.last_seen?new Date(h.last_seen).toLocaleString()+" ("+ago(h.last_seen)+")":""],
+  ])+metaBlock(h.meta)
+  +`<div class="sect">MITM — INTERCEPT THIS DEVICE</div>`
+    +`<div class="cmd mitm" data-cmd="set arp.spoof.targets ${esc(h.ipv4||"")}; set net.sniff.filter host ${esc(h.ipv4||"")}; arp.spoof on; net.sniff on"><span class="txt">⚡ MITM THIS DEVICE</span><span class="run">▶ START</span></div>`
+    +`<button class="mitmstop" data-stop="arp.spoof off; net.sniff off">■ STOP MITM — restore ARP &amp; stop sniff</button>`
+    +`<div class="sect">MORE ACTIONS</div>`
+    +cmdRow(`syn.scan ${h.ipv4||""} 1 10000`)
+    +cmdRow(`set net.sniff.filter host ${h.ipv4||""}; net.sniff on`)
+    +cmdRow(`net.show ${h.ipv4||""}`);
+  showDrawer((h.hostname||h.ipv4||"HOST"),body);
+}
+function openWifi(mac){
+  const ap=wifi.find(x=>x.mac===mac)||{mac};
+  const cl=(ap.clients||[]).map(c=>`<span class="chip">${esc((c.mac||"").toUpperCase())}${c.hostname?" · "+esc(c.hostname):""}</span>`).join("")||'<span class="muted">none observed</span>';
+  showDrawer(ap.hostname||ap.essid||"AP",
+    kv([["ESSID",esc(ap.hostname||ap.essid)],["BSSID",esc((ap.mac||"").toUpperCase())],["Vendor",esc(ap.vendor)],
+      ["Channel",ap.channel],["Frequency",ap.frequency?ap.frequency+" MHz":""],["RSSI",ap.rssi!=null?ap.rssi+" dBm":""],
+      ["Encryption",esc(ap.encryption||"OPEN")],["Cipher",esc(ap.cipher)],["Auth",esc(ap.authentication)],
+      ["Handshake",ap.handshake?'<span class="hs">captured ✓</span>':"no"]])
+    +`<div class="sect">CLIENTS (${(ap.clients||[]).length})</div>${cl}`
+    +`<div class="sect">ACTIONS — CLICK TO RUN</div>`
+      +cmdRow(`wifi.recon ${ap.mac||""}`)
+      +cmdRow(`wifi.deauth ${ap.mac||""}`));
+}
+function openBle(mac){
+  const d=ble.find(x=>x.mac===mac)||{mac};
+  const svc=(d.services||[]).map(s=>`<span class="chip">${esc(s.name||s.uuid)}</span>`).join("")||'<span class="muted">none</span>';
+  showDrawer(d.name||"BLE DEVICE",
+    kv([["Name",esc(d.name)],["MAC",esc((d.mac||"").toUpperCase())],["Vendor",esc(d.vendor)],
+      ["RSSI",d.rssi!=null?d.rssi+" dBm":""],["Connectable",d.connectable?"yes":"no"],["Flags",esc(d.flags)],
+      ["Last seen",d.last_seen?new Date(d.last_seen).toLocaleString():""]])
+    +`<div class="sect">SERVICES</div>${svc}`
+    +`<div class="sect">ACTIONS — CLICK TO RUN</div>`+cmdRow(`ble.enum ${d.mac||""}`));
+}
+
+// ================= RADAR =================
+const cv=$("#radar"), ctx=cv.getContext("2d");
+let sweep=0, blips=new Map(), blipXY=new Map();
+function resize(){const w=cv.parentElement.clientWidth,h=cv.parentElement.clientHeight,dpr=window.devicePixelRatio||1;
+  cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);cv._w=w;cv._h=h;}
+new ResizeObserver(resize).observe($("#radarWrap"));
+function blipFor(h){if(!blips.has(h.mac)){const hh=hash(h.mac);blips.set(h.mac,{a:(hh%3600)/10*Math.PI/180,r:0.30+((hh>>>12)%70)/100,ping:0});}
+  const b=blips.get(h.mac);b.gw=(gateway&&h.mac===gateway.mac);b.ip=h.ipv4;return b;}
+function drawRadar(){
+  const w=cv._w||300,h=cv._h||300,cx=w/2,cy=h/2,R=Math.min(w,h)/2-18; ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle=PAL.ring;ctx.lineWidth=1;for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(cx,cy,R*i/4,0,7);ctx.stroke();}
+  ctx.beginPath();ctx.moveTo(cx-R,cy);ctx.lineTo(cx+R,cy);ctx.moveTo(cx,cy-R);ctx.lineTo(cx,cy+R);ctx.stroke();
+  ctx.strokeStyle=PAL.spoke;for(let d=0;d<360;d+=30){const a=d*Math.PI/180;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);ctx.stroke();}
+  if(ctx.createConicGradient){const g=ctx.createConicGradient(sweep,cx,cy);
+    g.addColorStop(0,"rgba(0,255,195,.26)");g.addColorStop(0.08,"rgba(0,255,195,0)");g.addColorStop(1,"rgba(0,255,195,0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.fill();}
+  ctx.strokeStyle=PAL.neon;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(sweep)*R,cy+Math.sin(sweep)*R);ctx.stroke();
+  ctx.fillStyle=PAL.neon2;ctx.shadowColor=PAL.neon2;ctx.shadowBlur=12;ctx.beginPath();ctx.arc(cx,cy,4,0,7);ctx.fill();ctx.shadowBlur=0;
+  const active=DEMO?demoHosts:hosts; const macs=new Set(); blipXY.clear();
+  for(const hst of active){if(!hst.mac)continue;macs.add(hst.mac);const b=blipFor(hst);
+    const x=cx+Math.cos(b.a)*R*b.r,y=cy+Math.sin(b.a)*R*b.r; blipXY.set(hst.mac,{x,y});
+    let da=((sweep-b.a)%(2*Math.PI)+2*Math.PI)%(2*Math.PI); if(da<0.10)b.ping=1;
+    const col=b.gw?PAL.amber:PAL.neon;
+    if(b.ping>0){ctx.strokeStyle=col;ctx.globalAlpha=b.ping;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,10*(1.2-b.ping)+3,0,7);ctx.stroke();ctx.globalAlpha=1;b.ping-=0.018;}
+    ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(x,y,b.gw?4:3,0,7);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle=PAL.txt;ctx.globalAlpha=.75;ctx.font="9px monospace";const oct=(b.ip||"").split(".").pop();if(oct)ctx.fillText("."+oct,x+6,y+3);ctx.globalAlpha=1;}
+  for(const k of [...blips.keys()])if(!macs.has(k))blips.delete(k);
+  sweep=(sweep+0.02)%(2*Math.PI);
+  if(online||DEMO)$("#rlabel").textContent=`RANGE 4 RINGS · ${active.length} CONTACTS · CLICK A BLIP FOR DETAIL`;
+  requestAnimationFrame(drawRadar);
+}
+cv.addEventListener("click",e=>{const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=16;for(const [mac,p] of blipXY){const d=Math.hypot(p.x-mx,p.y-my);if(d<bd){bd=d;best=mac;}}if(best)openHost(best);});
+resize();drawRadar();
+
+// ================= DEMO =================
+let demoHosts=[],demoStart=Date.now(),demoEv=[],demoTx=0,demoRx=0,demoPk=0;
+function demoSeed(){
+  const vend=["Apple, Inc.","Samsung","Intel Corporate","Raspberry Pi","TP-Link","Espressif","Google","Amazon Tech","Ubiquiti","unknown"];
+  const names=["router.lan","johns-iphone","desktop-9f2","printer-hp","nest-cam","echo-dot","pi-hole","","smart-tv",""];
+  const gwMac="a4:2b:8c:00:11:01";
+  demoHosts=[{ipv4:"192.168.1.1",mac:gwMac,vendor:"Ubiquiti",hostname:"router.lan",last_seen:new Date().toISOString(),
+    meta:{values:{ports:{22:{port:22,proto:"tcp",service:"ssh",banner:"OpenSSH 8.4"},80:{port:80,proto:"tcp",service:"http",banner:"nginx/1.24"},443:{port:443,proto:"tcp",service:"https",banner:""},53:{port:53,proto:"tcp",service:"domain",banner:""}}}}}];
+  const portsets=[null,{80:{port:80,proto:"tcp",service:"http",banner:"lighttpd"}},{445:{port:445,proto:"tcp",service:"microsoft-ds",banner:""},139:{port:139,proto:"tcp",service:"netbios-ssn",banner:""}},{62078:{port:62078,proto:"tcp",service:"iphone-sync",banner:""}},{9100:{port:9100,proto:"tcp",service:"jetdirect",banner:"HP LaserJet"}}];
+  for(let i=2;i<=11;i++){const mac="a4:2b:8c:"+((i*37)%256).toString(16).padStart(2,"0")+":"+((i*91)%256).toString(16).padStart(2,"0")+":"+i.toString(16).padStart(2,"0");
+    const ps=portsets[i%portsets.length];
+    demoHosts.push({ipv4:"192.168.1."+(10+i),mac,vendor:vend[i%vend.length],hostname:names[i%names.length],
+      first_seen:new Date(Date.now()-3600000).toISOString(),last_seen:new Date(Date.now()-Math.random()*120000).toISOString(),
+      meta:{values:ps?{ports:ps}:{}}});}
+  gateway={ipv4:"192.168.1.1",mac:gwMac}; iface={ipv4:"192.168.1.50",mac:"de:ad:be:ef:12:34",hostname:"recon-station"};
+  wifi=[{hostname:"HOME-5G",mac:"b8:27:eb:aa:11:22",channel:36,rssi:-42,encryption:"WPA2",cipher:"CCMP",authentication:"PSK",clients:[{mac:"a4:2b:8c:12:34:56",hostname:"laptop"}],handshake:true},
+        {hostname:"xfinitywifi",mac:"00:1a:2b:3c:4d:5e",channel:6,rssi:-71,encryption:"",cipher:"",clients:[],handshake:false},
+        {hostname:"NETGEAR-guest",mac:"c0:3f:0e:99:88:77",channel:11,rssi:-63,encryption:"WPA3",clients:[{mac:"de:11:22:33:44:55"}],handshake:false}];
+  ble=[{name:"Mi Band 7",mac:"cd:12:34:56:78:9a",vendor:"Xiaomi",rssi:-58,connectable:true,last_seen:new Date().toISOString(),services:[{name:"Heart Rate"},{name:"Battery"}]},
+       {name:"",mac:"ff:ee:dd:cc:bb:aa",vendor:"Apple, Inc.",rssi:-77,connectable:false,last_seen:new Date(Date.now()-40000).toISOString(),services:[]}];
+}
+function demoTick(){
+  online=true;setConn(true); if(!demoHosts.length)demoSeed();
+  if(Math.random()<0.25){const h=demoHosts[Math.floor(Math.random()*demoHosts.length)];h.last_seen=new Date().toISOString();}
+  hosts=demoHosts;startedAt=demoStart;
+  demoTx+=Math.random()*80000;demoRx+=Math.random()*220000;demoPk+=Math.floor(Math.random()*400);
+  trafficMap={"192.168.1.1":{sent:Math.floor(demoTx*.42),received:Math.floor(demoRx*.63)}};
+  renderTraffic(demoTx,demoRx,demoPk,{tcp:Math.floor(demoPk*.6),udp:Math.floor(demoPk*.3),arp:Math.floor(demoPk*.05),dns:Math.floor(demoPk*.04),icmp:12,mdns:31});
+  const tags=["endpoint.new","sys.log","wifi.ap.new","mod.started","endpoint.lost"];
+  if(Math.random()<0.5){const h=demoHosts[Math.floor(Math.random()*demoHosts.length)];
+    demoEv.push({tag:tags[Math.floor(Math.random()*tags.length)],time:new Date().toISOString(),data:{ipv4:h.ipv4,hostname:h.hostname,vendor:h.vendor,mac:h.mac}});demoEv=demoEv.slice(-60);}
+  renderTop();renderAll();renderEvents(demoEv);
+}
+
+// ================= CHANNEL ACTIVITY CHART =================
+const chanCv=$("#chanCv"), chanCtx=chanCv&&chanCv.getContext("2d");
+function drawChannels(){
+  if(!chanCtx)return;
+  const wrap=$("#wifiChart"); const w=wrap.clientWidth-8, h=wrap.clientHeight-8;
+  if(w<=4||h<=4)return; // hidden tab
+  const dpr=window.devicePixelRatio||1; chanCv.width=w*dpr; chanCv.height=h*dpr; chanCtx.setTransform(dpr,0,0,dpr,0,0);
+  chanCtx.clearRect(0,0,w,h);
+  const P=PAL||pal();
+  const by={}; for(const ap of wifi){const c=+ap.channel||0; if(!c)continue; (by[c]=by[c]||{aps:0,cl:0}); by[c].aps++; by[c].cl+=(ap.clients&&ap.clients.length)||0;}
+  const chans=Object.keys(by).map(Number).sort((a,b)=>a-b);
+  if(!chans.length){chanCtx.fillStyle=P.dim;chanCtx.font="11px monospace";chanCtx.textAlign="left";chanCtx.fillText("no channel data — enable wifi.recon",12,h/2+4);return;}
+  const padL=10,padR=10,padT=26,padB=18, plotW=w-padL-padR, plotH=h-padT-padB;
+  const maxV=Math.max(...chans.map(c=>by[c].aps),1);
+  const n=chans.length, bw=Math.max(10,Math.min(40,plotW/n-6)), gap=(plotW-bw*n)/(n+1);
+  // baseline
+  chanCtx.strokeStyle=P.dim;chanCtx.globalAlpha=.3;chanCtx.beginPath();chanCtx.moveTo(padL,padT+plotH);chanCtx.lineTo(w-padR,padT+plotH);chanCtx.stroke();chanCtx.globalAlpha=1;
+  chanCtx.textAlign="center";
+  chans.forEach((c,i)=>{
+    const x=padL+gap+i*(bw+gap), v=by[c].aps, bh=Math.max(2,plotH*v/maxV), y=padT+plotH-bh;
+    const band24=c<=14, col=band24?P.neon2:P.violet;
+    chanCtx.fillStyle=col;chanCtx.globalAlpha=.85;chanCtx.shadowColor=col;chanCtx.shadowBlur=8;
+    chanCtx.fillRect(x,y,bw,bh);chanCtx.shadowBlur=0;chanCtx.globalAlpha=1;
+    // client ticks overlay
+    if(by[c].cl){chanCtx.fillStyle=P.amber;chanCtx.globalAlpha=.9;chanCtx.fillRect(x,y-3,bw*Math.min(1,by[c].cl/Math.max(1,v*3)),2);chanCtx.globalAlpha=1;}
+    chanCtx.fillStyle=P.txt;chanCtx.font="10px monospace";chanCtx.fillText(v,x+bw/2,y-6);
+    chanCtx.fillStyle=P.dim;chanCtx.font="9px monospace";chanCtx.fillText(c,x+bw/2,h-6);
+  });
+}
+if($("#wifiChart")) new ResizeObserver(()=>{if(curTab==="wifi")drawChannels();}).observe($("#wifiChart"));
+
+// ================= COMMAND EXECUTION =================
+function toast(html,kind){
+  const t=document.createElement("div"); t.className="toast"+(kind?" "+kind:""); t.innerHTML=html;
+  $("#toasts").appendChild(t);
+  setTimeout(()=>{t.style.transition="opacity .3s";t.style.opacity="0";setTimeout(()=>t.remove(),300);}, kind==="err"?6000:3200);
+}
+async function runCmd(cmd){
+  cmd=cmd.trim(); if(!cmd)return;
+  if(DEMO){toast(`DEMO — would run <b>${esc(cmd)}</b>`,"warn");return;}
+  try{
+    const r=await fetch(cfg.base+"/api/session",{method:"POST",
+      headers:{Authorization:auth(),"Content-Type":"application/json"},body:JSON.stringify({cmd})});
+    const body=await r.text().catch(()=>"");
+    if(!r.ok) throw new Error((r.status===401?"401 unauthorized — check ⚙ CFG credentials":r.status+" "+(body||"").slice(0,140)));
+    toast(`✓ ran <b>${esc(cmd)}</b>`); poll();
+  }catch(e){
+    const net=/Failed to fetch|NetworkError|load failed/i.test(e.message);
+    toast(`✗ <b>${esc(cmd)}</b><br>${esc(net?"cannot reach API — is api.rest on? endpoint in ⚙ CFG?":e.message)}`,"err");
+  }
+}
+// confirm dialog
+let pendingCmd=null;
+function askRun(cmd){
+  pendingCmd=cmd; const d=isDanger(cmd);
+  $("#cfCmd").textContent=cmd; $("#cfCmd").className="cmd"+(d?" danger":"");
+  $("#cfWarn").style.display=d?"":"none";
+  $("#cfTitle").textContent=d?"⚠ RUN OFFENSIVE COMMAND":"◈ RUN COMMAND";
+  $("#cfRun").style.borderColor=d?"var(--red)":"var(--neon)"; $("#cfRun").style.color=d?"var(--red)":"var(--neon)";
+  $("#confirm").classList.add("on");
+}
+$("#cfCancel").onclick=()=>{$("#confirm").classList.remove("on");pendingCmd=null;};
+$("#cfRun").onclick=()=>{$("#confirm").classList.remove("on");if(pendingCmd)runCmd(pendingCmd);pendingCmd=null;};
+// delegate clicks on any command row / stop button in the drawer
+$("#dBody").addEventListener("click",e=>{
+  const stop=e.target.closest("[data-stop]"); if(stop){toast("⏻ stopping MITM…","warn");runCmd(stop.dataset.stop);return;}
+  const el=e.target.closest(".cmd[data-cmd]"); if(el)askRun(el.dataset.cmd);
+});
+
+// ================= ROUTER <-> ENDPOINT LINK =================
+let trafficMap={}, rateHist=[], lastGw=null;
+const rateCv=$("#rateCv"), rctx=rateCv&&rateCv.getContext("2d");
+function pushRate(){
+  const gt=(gateway&&trafficMap&&trafficMap[gateway.ipv4])||{sent:0,received:0};
+  const now=Date.now();
+  if(lastGw){ const dt=Math.max(0.5,(now-lastGw.t)/1000);
+    rateHist.push({up:Math.max(0,((gt.sent||0)-lastGw.sent)/dt), dn:Math.max(0,((gt.received||0)-lastGw.received)/dt)});
+    if(rateHist.length>60)rateHist.shift();
+  }
+  lastGw={sent:gt.sent||0,received:gt.received||0,t:now};
+}
+function drawRate(){
+  if(!rctx)return; const wrap=rateCv.parentElement, w=wrap.clientWidth, h=wrap.clientHeight-4;
+  if(w<=2||h<=2)return; const dpr=window.devicePixelRatio||1; rateCv.width=w*dpr; rateCv.height=h*dpr; rctx.setTransform(dpr,0,0,dpr,0,0);
+  rctx.clearRect(0,0,w,h); const P=PAL||pal(); const n=rateHist.length;
+  if(n<2){rctx.fillStyle=P.dim;rctx.font="9px monospace";rctx.fillText("bytes/sec — waiting for samples…",2,h/2);return;}
+  const max=Math.max(1,...rateHist.map(r=>Math.max(r.up,r.dn)));
+  const X=i=>(i/(n-1))*w, Y=v=>h-(v/max)*(h-3)-1;
+  const draw=(key,col)=>{
+    rctx.beginPath(); rateHist.forEach((r,i)=>{i?rctx.lineTo(X(i),Y(r[key])):rctx.moveTo(X(i),Y(r[key]));});
+    rctx.strokeStyle=col; rctx.lineWidth=1.4; rctx.stroke();
+    rctx.lineTo(X(n-1),h); rctx.lineTo(0,h); rctx.closePath(); rctx.globalAlpha=.13; rctx.fillStyle=col; rctx.fill(); rctx.globalAlpha=1;
+  };
+  draw("dn",P.neon); draw("up",P.neon2);
+  const c=rateHist[n-1];
+  $("#rateLbl").innerHTML=`<span class="u">▲ ${fmtBytes(c.up)}/s</span> &nbsp; <span class="d">▼ ${fmtBytes(c.dn)}/s</span>`;
+}
+function renderLink(){
+  $("#lkGwIp").textContent=gateway?gateway.ipv4:"—";
+  $("#lkGwMac").textContent=gateway?(gateway.mac||"").toUpperCase():"";
+  $("#lkMeIp").textContent=iface?iface.ipv4:"—";
+  $("#lkMeMac").textContent=iface?(iface.mac||"").toUpperCase():"";
+  const gt=(gateway&&trafficMap&&trafficMap[gateway.ipv4])||null;
+  $("#lkUp").textContent=fmtBytes(gt?gt.sent:0);
+  $("#lkDn").textContent=fmtBytes(gt?gt.received:0);
+  $("#lkNote").style.display=(gt&&((gt.sent||0)+(gt.received||0)>0))?"none":"";
+  pushRate(); drawRate();
+}
+
+// ================= COMMAND BAR =================
+const cmdBar=$("#cmdBar");
+cmdBar.addEventListener("keydown",e=>{
+  if(e.key!=="Enter")return;
+  const c=cmdBar.value.trim(); if(!c)return; cmdBar.value="";
+  if(isDanger(c))askRun(c); else runCmd(c);
+});
+
+// ================= PANIC — STOP ALL ATTACKS =================
+const PANIC=["arp.spoof off","dns.spoof off","ndp.spoof off","dhcp6.spoof off","net.sniff off","http.proxy off","https.proxy off","syn.scan stop"];
+$("#panicBtn").onclick=async()=>{
+  if(DEMO){toast("DEMO — would stop all attack modules","warn");return;}
+  toast("⏻ stopping all attack modules…","warn");
+  await Promise.allSettled(PANIC.map(c=>fetch(cfg.base+"/api/session",{method:"POST",
+    headers:{Authorization:auth(),"Content-Type":"application/json"},body:JSON.stringify({cmd:c})})));
+  toast("✓ attack modules stopped"); poll();
+};
+
+// ================= PORT SCANNER (syn.scan) =================
+let scanning=false, scanStartT=0, scanTimer=null;
+function scanResults(){
+  const src=DEMO?demoHosts:hosts, out=[];
+  for(const h of src){const p=h.meta&&h.meta.values&&h.meta.values.ports;
+    if(p&&typeof p==="object")for(const k in p){const op=p[k]||{};out.push({ip:h.ipv4,host:h.hostname,port:op.port||+k,proto:op.proto||"tcp",service:op.service||"",banner:op.banner||""});}}
+  return out.sort((a,b)=>(a.ip||"").localeCompare(b.ip||"")||a.port-b.port);
+}
+function updScanStatus(){$("#scanStatus").innerHTML=scanning?`<b>scanning…</b> ${Math.floor((Date.now()-scanStartT)/1000)}s · ${scanResults().length} open`:`${scanResults().length} open ports`;}
+function renderScan(){
+  const res=scanResults(), body=$("#scanBody");
+  if(!res.length){body.innerHTML=`<div class="scan-empty"><div>${scanning?"scanning… waiting for open ports":"No open ports found yet."}</div><div style="font-size:11px">Open ports appear here as bettercap finds them.</div></div>`;updScanStatus();return;}
+  const byHost={}; for(const r of res)(byHost[r.ip]=byHost[r.ip]||[]).push(r);
+  let html=`<table><thead><tr><th>PORT</th><th>PROTO</th><th>SERVICE</th><th>BANNER</th></tr></thead><tbody>`;
+  for(const ip of Object.keys(byHost)){
+    const h=(DEMO?demoHosts:hosts).find(x=>x.ipv4===ip)||{};
+    html+=`<tr class="host-hdr"><td colspan="4">${esc(ip)}${h.hostname?" · "+esc(h.hostname):""} — ${byHost[ip].length} open</td></tr>`;
+    for(const r of byHost[ip])html+=`<tr><td class="pt">${r.port}</td><td>${esc(r.proto)}</td><td class="svc">${esc(r.service)||"—"}</td><td class="ban">${esc(r.banner)||""}</td></tr>`;
+  }
+  body.innerHTML=html+`</tbody></table>`; updScanStatus();
+}
+function openScan(pref){
+  $("#scanHosts").innerHTML=(DEMO?demoHosts:hosts).map(h=>`<option value="${esc(h.ipv4)}">${esc(h.hostname||h.vendor||"")}</option>`).join("");
+  if(pref)$("#scanTarget").value=pref;
+  else if(!$("#scanTarget").value&&gateway)$("#scanTarget").value=gateway.ipv4;
+  $("#scanModal").classList.add("on"); renderScan();
+}
+$("#scanBtn").onclick=()=>openScan();
+$("#scanClose").onclick=()=>$("#scanModal").classList.remove("on");
+$("#scanPreset").onchange=()=>{const c=$("#scanPreset").value==="custom";$("#scanStart").style.display=c?"":"none";$("#scanEnd").style.display=c?"":"none";};
+function scanRange(){const p=$("#scanPreset").value;if(p==="custom")return[(+$("#scanStart").value||1),(+$("#scanEnd").value||1024)];const a=p.split("-");return[+a[0],+a[1]];}
+$("#scanGo").onclick=()=>{
+  const tgt=$("#scanTarget").value.trim(); if(!tgt){toast("enter a target IP or range","warn");return;}
+  const rg=scanRange();
+  scanning=true; scanStartT=Date.now(); updScanStatus();
+  runCmd(`syn.scan ${tgt} ${rg[0]} ${rg[1]}`);
+  if(scanTimer)clearInterval(scanTimer);
+  scanTimer=setInterval(()=>{renderScan();if(!DEMO)poll();},1500);
+};
+$("#scanStop").onclick=()=>{scanning=false;if(scanTimer)clearInterval(scanTimer);runCmd("syn.scan stop");updScanStatus();};
+
+// ================= AI ANALYZER (on-device heuristic) =================
+function analyze(){
+  const hs=DEMO?demoHosts:hosts, w=wifi, S=[];
+  if(!hs.length&&!online) return `<span class="muted">Awaiting a live bettercap link — start the session to generate an assessment.</span>`;
+  const sub=iface&&iface.ipv4?iface.ipv4.replace(/\.\d+$/,".0/24"):"the local network";
+  S.push(`This session is monitoring <b>${esc(sub)}</b> and has mapped <b>${hs.length}</b> host${hs.length===1?"":"s"}${iface?` from <b>${esc(iface.ipv4||"")}</b>`:""}.`);
+  if(gateway) S.push(`The gateway sits at <b>${esc(gateway.ipv4||"")}</b>${gateway.vendor?` (<b>${esc(gateway.vendor)}</b> hardware)`:""} and carries all upstream traffic.`);
+  const vendors=[...new Set(hs.map(h=>h.vendor).filter(Boolean))];
+  if(vendors.length) S.push(`Fingerprints span ${vendors.length} vendor${vendors.length===1?"":"s"}, including ${vendors.slice(0,4).map(esc).join(", ")}${vendors.length>4?", among others":""}.`);
+  const cat={phone:/phone|iphone|android|pixel|galaxy/i,camera:/cam|nest|ring|doorbell/i,printer:/print|laserjet|epson|canon|jetdirect/i,"media device":/tv|roku|firetv|chromecast|appletv|smart-tv/i,"IoT device":/echo|alexa|smart|pi-?hole|raspberry|esp|nest/i};
+  const found={}; for(const h of hs){const s=(h.hostname||"")+" "+(h.vendor||"");for(const k in cat)if(cat[k].test(s))found[k]=(found[k]||0)+1;}
+  const ck=Object.keys(found);
+  if(ck.length) S.push(`Device classes detected: ${ck.map(k=>`${found[k]} ${k}${found[k]>1?"s":""}`).join(", ")}.`);
+  const ports=[]; for(const h of hs){const p=h.meta&&h.meta.values&&h.meta.values.ports;if(p)for(const k in p)ports.push({ip:h.ipv4,port:p[k].port||+k,service:p[k].service||""});}
+  if(ports.length){
+    const nh=new Set(ports.map(p=>p.ip)).size;
+    S.push(`Scanning surfaced <b>${ports.length}</b> open service${ports.length===1?"":"s"} across ${nh} host${nh>1?"s":""}.`);
+    const RISK={23:"Telnet (cleartext)",21:"FTP (cleartext)",445:"SMB file-sharing",139:"NetBIOS",3389:"RDP",5900:"VNC",1900:"UPnP",9100:"raw printing"};
+    const risky=[...new Set(ports.filter(p=>RISK[p.port]).map(p=>p.port))];
+    if(risky.length) S.push(`<span class="warn">⚠ Attention:</span> exposed ${risky.slice(0,4).map(pt=>`<b>${RISK[pt]}</b> (${pt})`).join(", ")} — common lateral-movement / exfiltration surface worth reviewing.`);
+    else S.push(`None of the open ports map to high-risk services; the exposed surface looks conventional (web/DNS/management).`);
+  } else if(online){ S.push(`No port scans have run yet — use <b>PORT SCAN</b> to profile services on the gateway or any host.`); }
+  if(w.length){
+    const open=w.filter(a=>!a.encryption||/^open$/i.test(a.encryption||"")).length, hsk=w.filter(a=>a.handshake).length;
+    S.push(`${w.length} Wi-Fi AP${w.length===1?"":"s"} are in range${open?`, of which <span class="warn">${open} ${open===1?"is":"are"} open/unencrypted</span>`:", all encrypted"}.`);
+    if(hsk) S.push(`A WPA handshake is captured on <b>${hsk}</b> network${hsk>1?"s":""}, enabling offline password auditing.`);
+  }
+  const gt=gateway&&trafficMap&&trafficMap[gateway.ipv4];
+  if(gt&&((gt.sent||0)+(gt.received||0)>0)) S.push(`Router-link telemetry shows <b>${fmtBytes(gt.sent)}</b> up and <b>${fmtBytes(gt.received)}</b> down through the gateway so far.`);
+  const newc=evList.filter(e=>/new/.test(e.tag||"")).length, lost=evList.filter(e=>/lost/.test(e.tag||"")).length;
+  if(newc||lost) S.push(`Recent churn: ${newc} device${newc===1?"":"s"} appeared and ${lost} dropped off — ${newc>lost?"an actively growing":"a fairly stable"} population.`);
+  const recs=[];
+  if(ports.some(p=>[23,21].includes(p.port))) recs.push("disable cleartext Telnet/FTP");
+  if(w.some(a=>!a.encryption||/^open$/i.test(a.encryption||""))) recs.push("secure or remove open Wi-Fi");
+  if(!ports.length&&online) recs.push("run a port scan on the gateway and any servers");
+  recs.push("keep MITM/sniffing scoped to devices you own");
+  S.push(`<span class="rec">Recommendation:</span> ${recs.slice(0,3).join("; ")}.`);
+  return S.slice(0,15).map(s=>`<span class="asent">${s}</span>`).join(" ");
+}
+function renderAnalysis(){ $("#aiBody").innerHTML=analyze(); $("#aiTime").textContent="updated "+new Date().toLocaleTimeString(); }
+$("#aiRefresh").onclick=()=>{ const b=$("#aiBody"),r=$("#aiRefresh"); r.classList.add("spin"); b.classList.add("analyzing");
+  setTimeout(()=>{renderAnalysis();b.classList.remove("analyzing");},450); setTimeout(()=>r.classList.remove("spin"),600); };
+
+// ================= ROUTER / ISP INTEL =================
+let ispData=null, ispLoading=false;
+async function loadISP(){
+  if(DEMO){ ispData={ip:"98.42.17.203",city:"Austin",region:"Texas",country:"United States",
+    connection:{isp:"Comcast Cable",org:"Comcast Business",asn:7922,domain:"comcast.net"},
+    timezone:{id:"America/Chicago"}}; ispLoading=false; renderISP(); return; }
+  if(ispLoading)return; ispLoading=true; renderISP();
+  try{ const r=await fetch("https://ipwho.is/",{cache:"no-store"}); const d=await r.json();
+    if(d&&d.success!==false) ispData=d; else throw new Error((d&&d.message)||"lookup failed"); }
+  catch(e){ ispData={error:/Failed to fetch|NetworkError/i.test(e.message)?"lookup blocked (offline / no internet)":e.message}; }
+  ispLoading=false; renderISP();
+}
+function renderISP(){
+  const gwv=gateway&&gateway.vendor;
+  let html=kv([
+    ["Router IP", gateway?`<span class="gw">${esc(gateway.ipv4||"")}</span>`:"—"],
+    ["Router MAC", gateway?esc((gateway.mac||"").toUpperCase()):"—"],
+    ["Router vendor", gwv?esc(gwv):'<span class="muted">unknown (OUI)</span>'],
+  ]);
+  if(ispLoading) html+=`<div class="muted" style="padding:4px 0">◇ looking up public IP / ISP…</div>`;
+  else if(ispData&&!ispData.error){ const c=ispData.connection||{};
+    html+=`<div class="sect">INTERNET / ISP</div>`+kv([
+      ["Public IP",`<b>${esc(ispData.ip||"")}</b>`],
+      ["ISP",esc(c.isp||c.org||"—")],
+      ["Organization",esc(c.org||"—")],
+      ["AS",esc(c.asn?("AS"+c.asn+(c.domain?" · "+c.domain:"")):"—")],
+      ["Location",esc([ispData.city,ispData.region,ispData.country].filter(Boolean).join(", "))||"—"],
+      ["Timezone",esc((ispData.timezone&&ispData.timezone.id)||"—")],
+    ])+`<div class="lnote">public egress data via ipwho.is</div>`;
+  } else if(ispData&&ispData.error) html+=`<div class="lnote" style="color:var(--red)">ISP lookup: ${esc(ispData.error)}</div>`;
+  else html+=`<div class="lnote">click ⟳ LOOKUP to resolve your public IP &amp; ISP (contacts ipwho.is)</div>`;
+  $("#ispBody").innerHTML=html;
+}
+$("#ispRefresh").onclick=loadISP;
+
+// settings
+$("#gear").onclick=()=>{$("#mBase").value=cfg.base;$("#mUser").value=cfg.user;$("#mPass").value=cfg.pass;$("#modal").classList.add("on");};
+$("#mCancel").onclick=()=>$("#modal").classList.remove("on");
+$("#mSave").onclick=()=>{cfg.base=$("#mBase").value.trim().replace(/\/$/,"");cfg.user=$("#mUser").value.trim();cfg.pass=$("#mPass").value;localStorage.setItem(LS,JSON.stringify(cfg));$("#modal").classList.remove("on");poll();};
+
+// ================= VIEW NAVIGATION =================
+let activeView="overview";
+function showView(v){
+  document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="view-"+v));
+  document.querySelectorAll(".navb").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
+  activeView=v;
+  requestAnimationFrame(()=>{ resize(); if(v==="hosts")drawChannels(); if(v==="traffic")drawRate(); });
+}
+document.querySelectorAll(".navb[data-view]").forEach(b=>b.onclick=()=>{ b.dataset.view==="scanner"?openScan():showView(b.dataset.view); });
+
+// ================= ABOUT / PORTFOLIO =================
+function openAbout(){ $("#aboutModal").classList.add("on"); }
+$("#aboutBtn").onclick=openAbout;
+$("#aboutClose").onclick=()=>$("#aboutModal").classList.remove("on");
+$("#aboutModal").addEventListener("click",e=>{ if(e.target.id==="aboutModal")$("#aboutModal").classList.remove("on"); });
+$("#demoBadge").onclick=openAbout;
+if(DEMO){ $("#demoBadge").classList.add("on"); document.title="RECON CONSOLE — Terrill Hilliard · Live Demo"; }
+
+// boot
+if(DEMO)$("#rlabel").textContent="DEMO MODE — synthetic data";
+poll(); setInterval(poll,2000); loadISP();
+setInterval(()=>{if(startedAt)$("#sUp").textContent=hhmmss(Date.now()-startedAt);},1000);
+</script>
+</body>
+</html>
