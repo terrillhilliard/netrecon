@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 DEFAULT_DB = str(Path.home() / ".netrecon" / "netrecon.db")
 
@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS dns(
   client TEXT, qname TEXT, hits INTEGER DEFAULT 1, last_seen REAL,
   PRIMARY KEY(client, qname)
 );
+CREATE TABLE IF NOT EXISTS alerts(
+  ts TEXT, src TEXT, sport INTEGER, dst TEXT, dport INTEGER, proto TEXT,
+  signature TEXT, category TEXT, severity INTEGER, source TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 """
 
 
@@ -143,3 +148,29 @@ def recent_dns(con: sqlite3.Connection, limit: int = 50) -> List[sqlite3.Row]:
     return con.execute(
         "SELECT * FROM dns ORDER BY last_seen DESC LIMIT ?", (limit,)
     ).fetchall()
+
+
+def save_alerts(con: sqlite3.Connection, alerts: List[dict]) -> int:
+    rows = [
+        (a.get("ts", ""), a.get("src", ""), a.get("sport"), a.get("dst", ""),
+         a.get("dport"), a.get("proto", ""), a.get("signature", ""),
+         a.get("category", ""), a.get("severity"), a.get("source", ""))
+        for a in alerts
+    ]
+    con.executemany(
+        "INSERT INTO alerts(ts,src,sport,dst,dport,proto,signature,category,severity,source) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)", rows,
+    )
+    con.commit()
+    return len(rows)
+
+
+def recent_alerts(con: sqlite3.Connection, limit: int = 50,
+                  min_severity: Optional[int] = None) -> List[sqlite3.Row]:
+    con.row_factory = sqlite3.Row
+    if min_severity is not None:
+        return con.execute(
+            "SELECT * FROM alerts WHERE severity IS NOT NULL AND severity<=? "
+            "ORDER BY ts DESC LIMIT ?", (min_severity, limit),
+        ).fetchall()
+    return con.execute("SELECT * FROM alerts ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()

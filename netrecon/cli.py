@@ -192,6 +192,50 @@ def cmd_watch(args) -> None:
         output.note("stopped")
 
 
+def cmd_ingest(args) -> None:
+    import glob
+    import os
+    from pathlib import Path
+
+    from . import ingest
+
+    paths: List[str] = []
+    for pat in args.paths:
+        if os.path.isdir(pat):
+            for ext in ("*.log", "*.json"):
+                paths += [str(p) for p in Path(pat).glob(ext)]
+        else:
+            paths += glob.glob(pat) or [pat]
+
+    con = store.connect(args.db)
+    total = {"alerts": 0, "flows": 0, "dns": 0}
+    for path in paths:
+        fmt = args.format or ingest.detect_format(path)
+        try:
+            c = ingest.ingest_file(path, fmt, con)
+        except OSError as e:
+            output.note(f"skip {path}: {e}")
+            continue
+        total = {k: total[k] + c[k] for k in total}
+        output.note(f"{os.path.basename(path)} ({fmt}) -> "
+                    f"{c['alerts']} alerts, {c['flows']} flows, {c['dns']} dns")
+    con.close()
+    output.note(f"[green]done[/] - {total['alerts']} alerts, {total['flows']} flows, "
+                f"{total['dns']} dns into [dim]{args.db}[/]")
+
+
+def cmd_alerts(args) -> None:
+    con = store.connect(args.db)
+    rows = [dict(r) for r in store.recent_alerts(con, limit=args.limit, min_severity=args.severity)]
+    con.close()
+    if args.json:
+        print(output.to_json(rows))
+    else:
+        if rows:
+            output.print_alerts(rows)
+        output.note(f"{len(rows)} alert(s) in [dim]{args.db}[/]")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="netrecon",
@@ -254,6 +298,20 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--db", default=store.DEFAULT_DB)
     w.add_argument("--once", action="store_true", help="one pass then exit (sets baseline)")
     w.set_defaults(func=cmd_watch)
+
+    ig = sub.add_parser("ingest", help="ingest Suricata eve.json / Zeek logs into the store (SIEM)")
+    ig.add_argument("paths", nargs="+", help="log files, globs, or directories")
+    ig.add_argument("--format", choices=["suricata", "zeek-conn", "zeek-dns"],
+                    help="force a format (default: auto-detect per file)")
+    ig.add_argument("--db", default=store.DEFAULT_DB)
+    ig.set_defaults(func=cmd_ingest)
+
+    al = sub.add_parser("alerts", help="show ingested IDS alerts")
+    al.add_argument("--limit", type=int, default=50)
+    al.add_argument("--severity", type=int, help="only severity <= N (1=highest)")
+    al.add_argument("--json", action="store_true")
+    al.add_argument("--db", default=store.DEFAULT_DB)
+    al.set_defaults(func=cmd_alerts)
 
     i = sub.add_parser("interfaces", help="list network interfaces and the auto-selected default")
     i.add_argument("--iface", help="show which interface this preference would select")

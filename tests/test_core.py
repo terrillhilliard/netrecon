@@ -3,7 +3,7 @@
 import socket
 import struct
 
-from netrecon import enrich, monitor, net, scanner, watch
+from netrecon import enrich, ingest, monitor, net, scanner, watch
 
 
 def _dns_packet(name, src="192.168.1.50", dst="8.8.8.8"):
@@ -74,3 +74,41 @@ def test_ntfy_url():
 def test_host_key():
     assert watch._host_key("aa:bb:cc:dd:ee:ff", "1.2.3.4") == "aa:bb:cc:dd:ee:ff"
     assert watch._host_key("", "1.2.3.4") == "ip:1.2.3.4"
+
+
+def test_suricata_alert():
+    line = ('{"timestamp":"2026-07-26T04:00:00Z","event_type":"alert","src_ip":"10.0.0.5",'
+            '"src_port":51000,"dest_ip":"93.184.216.34","dest_port":443,"proto":"TCP",'
+            '"alert":{"signature":"ET MALWARE Test","category":"A Network Trojan","severity":1}}')
+    r = ingest.parse_suricata_line(line)
+    assert r["kind"] == "alert" and r["signature"] == "ET MALWARE Test"
+    assert r["severity"] == 1 and r["dst"] == "93.184.216.34" and r["source"] == "suricata"
+
+
+def test_suricata_dns_and_flow():
+    dns = ingest.parse_suricata_line('{"event_type":"dns","src_ip":"10.0.0.5","dns":{"rrname":"evil.example.com"}}')
+    assert dns["kind"] == "dns" and dns["qname"] == "evil.example.com"
+    flow = ingest.parse_suricata_line('{"event_type":"flow","src_ip":"10.0.0.5","dest_ip":"1.1.1.1",'
+                                      '"proto":"UDP","dest_port":53,"flow":{"pkts_toserver":2,"pkts_toclient":1,'
+                                      '"bytes_toserver":120,"bytes_toclient":300}}')
+    assert flow["kind"] == "flow" and flow["packets"] == 3 and flow["bytes"] == 420
+
+
+def test_suricata_ignores_junk():
+    assert ingest.parse_suricata_line("not json") is None
+    assert ingest.parse_suricata_line('{"event_type":"stats"}') is None
+
+
+def test_zeek_conn_and_dns():
+    conn = ingest.parse_zeek_conn({"id.orig_h": "10.0.0.5", "id.resp_h": "1.1.1.1", "proto": "tcp",
+                                   "id.resp_p": 443, "orig_pkts": 5, "resp_pkts": 4,
+                                   "orig_ip_bytes": 500, "resp_ip_bytes": 4000})
+    assert conn["kind"] == "flow" and conn["dport"] == 443 and conn["bytes"] == 4500
+    dns = ingest.parse_zeek_dns({"id.orig_h": "10.0.0.5", "query": "example.com"})
+    assert dns["kind"] == "dns" and dns["qname"] == "example.com"
+
+
+def test_detect_format():
+    assert ingest.detect_format("/logs/eve.json") == "suricata"
+    assert ingest.detect_format("/logs/conn.log") == "zeek-conn"
+    assert ingest.detect_format("/logs/dns.log") == "zeek-dns"

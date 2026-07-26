@@ -122,5 +122,30 @@ def print_dns(rows: List[dict]) -> None:
             print(f"{r['client']:16} {r['qname']}  x{r['hits']}")
 
 
+def print_alerts(rows: List[dict]) -> None:
+    sev_lbl = {1: "1·HIGH", 2: "2·MED", 3: "3·low", 4: "4·info"}
+    sev_style = {1: "bold red", 2: "yellow", 3: "dim", 4: "dim"}
+    try:
+        from rich import box
+        from rich.console import Console
+        from rich.table import Table
+
+        t = Table(box=box.SIMPLE_HEAVY, header_style="bold red", pad_edge=False)
+        for c in ("Time", "Sev", "Signature", "Category", "Src", "Dst"):
+            t.add_column(c)
+        for r in rows:
+            sev = r.get("severity")
+            lbl = f"[{sev_style.get(sev, 'dim')}]{sev_lbl.get(sev, str(sev or '-'))}[/]"
+            t.add_row((r.get("ts", "") or "")[:19], lbl, (r.get("signature", "") or "")[:52],
+                      (r.get("category", "") or "")[:22],
+                      f"{r.get('src', '')}:{r.get('sport') or ''}",
+                      f"{r.get('dst', '')}:{r.get('dport') or ''}")
+        Console().print(t)
+    except ImportError:
+        for r in rows:
+            print(f"{(r.get('ts','') or '')[:19]}  sev{r.get('severity')}  "
+                  f"{r.get('signature','')}  {r.get('src','')} -> {r.get('dst','')}")
+
+
 def to_json(obj) -> str:
     return json.dumps(obj, indent=2)

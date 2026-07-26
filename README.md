@@ -23,6 +23,7 @@ An optional `serve` command hosts a real-time web dashboard on top of the same e
 - **`monitor`** — passive flow + DNS capture via raw sockets (pure stdlib; needs admin).
 - **`watch`** — continuous rescans that alert on new devices / newly-opened ports (console + optional [ntfy](https://ntfy.sh) phone push).
 - **`serve`** — live web console (radar, host drill-down, port scanner, traffic telemetry) served from the netrecon engine.
+- **`ingest` / `alerts`** — pull Suricata `eve.json` + Zeek logs into the store and query IDS alerts (the SIEM spine).
 - **`interfaces`** — list adapters and pick which one to use; auto-prefers wired, skips VPN/virtual, switch with `--iface`.
 - **`hosts`** — the accumulated SQLite asset inventory (`first_seen` / `last_seen` / `times_seen`).
 - Clean [rich](https://github.com/Textualize/rich) tables with graceful plain-text fallback, or `--json` for pipelines.
@@ -51,6 +52,8 @@ netrecon monitor --duration 30             # 30s passive flow + DNS capture (adm
 netrecon watch --interval 30 --ntfy my-lan # rescan every 30s; push new-device alerts to your phone
 netrecon serve                             # open the live web dashboard (http://127.0.0.1:8081)
 netrecon serve --iface eth0 --monitor      # bind an interface + live traffic capture
+netrecon ingest /var/log/suricata/eve.json # pull sensor logs into the store (auto-detects format)
+netrecon alerts --severity 1               # show high-severity IDS alerts
 netrecon hosts                             # review the accumulated inventory
 ```
 
@@ -87,7 +90,8 @@ DNS events. Data persists to `~/.netrecon/netrecon.db`.
 | 0.2 | `monitor` — passive flow/DNS capture | ✅ done |
 | 0.3 | `watch` — new-device / new-port alerts → ntfy | ✅ done |
 | 0.4 | `serve` — web console on the netrecon engine | ✅ done |
-| 0.5 | Zeek/Suricata ingest → home SIEM (flow search, threat-intel, anomaly scoring) | planned |
+| 0.5 | `ingest` / `alerts` — Suricata + Zeek → SQLite SIEM spine | ✅ done |
+| 0.6 | threat-intel enrichment, anomaly scoring, alerts in the dashboard | planned |
 
 ## Legal
 
