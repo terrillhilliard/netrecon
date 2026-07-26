@@ -146,7 +146,7 @@ def cmd_serve(args) -> None:
         host=args.host, port=args.port, target=args.target, ports=ports,
         timeout=args.timeout, db_path=args.db, rescan=args.rescan,
         monitor_on=args.monitor, open_browser=not args.no_browser, iface=iface,
-        ai_key=args.ai_key, ai_model=args.ai_model,
+        ai_key=args.ai_key, ai_model=args.ai_model, vt_key=args.vt_key, ha_key=args.ha_key,
     )
 
 
@@ -325,6 +325,11 @@ def cmd_dns(args) -> None:
         output.note(f"{len(rows)} DNS name(s) in [dim]{args.db}[/]")
 
 
+def cmd_gui(args) -> None:
+    from . import gui
+    gui.main()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="netrecon",
@@ -376,6 +381,8 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--no-browser", action="store_true", help="don't auto-open a browser")
     v.add_argument("--ai-key", help="Anthropic API key for the AI ANALYSIS tab (else $ANTHROPIC_API_KEY)")
     v.add_argument("--ai-model", help="AI model id (default: claude-sonnet-5)")
+    v.add_argument("--vt-key", help="VirusTotal API key for THREAT INTEL (else $VT_API_KEY)")
+    v.add_argument("--ha-key", help="Hybrid Analysis API key for THREAT INTEL (else $HYBRID_ANALYSIS_KEY)")
     v.set_defaults(func=cmd_serve)
 
     w = sub.add_parser("watch", help="continuously scan and alert on new devices / new ports")
@@ -422,6 +429,8 @@ def build_parser() -> argparse.ArgumentParser:
     al.add_argument("--json", action="store_true")
     al.add_argument("--db", default=store.DEFAULT_DB)
     al.set_defaults(func=cmd_alerts)
+
+    sub.add_parser("gui", help="open the point-and-click launcher window").set_defaults(func=cmd_gui)
 
     i = sub.add_parser("interfaces", help="list network interfaces and the auto-selected default")
     i.add_argument("--iface", help="show which interface this preference would select")

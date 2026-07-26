@@ -3,7 +3,7 @@
 import socket
 import struct
 
-from netrecon import ai, enrich, ingest, mitm, monitor, net, scanner, watch
+from netrecon import ai, enrich, ingest, intel, mitm, monitor, net, scanner, watch
 
 
 def _dns_packet(name, src="192.168.1.50", dst="8.8.8.8"):
@@ -118,6 +118,21 @@ def test_mitm_http_host():
     raw = b"GET /index.html HTTP/1.1\r\nHost: tracker.example.com\r\nUser-Agent: x\r\n\r\n"
     assert mitm.http_host(raw) == "tracker.example.com"
     assert mitm.http_host(b"not http") is None
+
+
+def test_intel_classify():
+    assert intel.classify("8.8.8.8") == "ip"
+    assert intel.classify("evil.example.com") == "domain"
+    assert intel.classify("https://bad.example.com/x") == "url"
+    assert intel.classify("d41d8cd98f00b204e9800998ecf8427e") == "hash"       # md5
+    assert intel.classify("a" * 64) == "hash"                                  # sha256
+    assert intel.classify("not a valid indicator!!") == "unknown"
+
+
+def test_intel_links():
+    lk = intel.links("8.8.8.8", "ip")
+    assert "virustotal.com" in lk["virustotal"] and "hybrid-analysis.com" in lk["hybrid"]
+    assert intel.links("a" * 64, "hash")["anyrun"].startswith("https://any.run/report/")
 
 
 def test_ai_build_context():

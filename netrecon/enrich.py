@@ -53,15 +53,34 @@ def hostname(ip: str) -> str:
         return ""
 
 
-def banner(ip: str, port: int, timeout: float = 1.2) -> str:
-    """Grab a short service banner from an open port (best effort)."""
+_HTTP_PORTS = {80, 591, 8000, 8008, 8080, 8081, 8088, 8888, 9000, 9090}
+
+
+def banner(ip: str, port: int, timeout: float = 1.5) -> str:
+    """Grab a service banner / version string from an open port (best effort).
+
+    For HTTP ports it returns the Server header (e.g. 'nginx/1.24'); for other
+    services it returns the greeting line (e.g. 'SSH-2.0-OpenSSH_8.4', FTP/SMTP
+    banners). HTTPS/TLS ports return '' (no plaintext banner)."""
     try:
         with socket.create_connection((ip, port), timeout=timeout) as s:
             s.settimeout(timeout)
-            if port in (80, 8000, 8080, 8081, 8088, 8888, 9000):
-                s.sendall(b"HEAD / HTTP/1.0\r\nHost: %b\r\n\r\n" % ip.encode())
-            data = s.recv(256)
-            for line in data.decode("latin-1", "replace").splitlines():
+            if port in _HTTP_PORTS:
+                s.sendall(b"HEAD / HTTP/1.0\r\nHost: %b\r\nUser-Agent: netrecon\r\n\r\n" % ip.encode())
+            data = b""
+            try:
+                while len(data) < 2048:
+                    chunk = s.recv(512)
+                    if not chunk:
+                        break
+                    data += chunk
+            except OSError:
+                pass
+            text = data.decode("latin-1", "replace")
+            for line in text.split("\r\n"):  # prefer the HTTP Server header
+                if line.lower().startswith("server:"):
+                    return line.split(":", 1)[1].strip()[:120]
+            for line in text.splitlines():   # else first meaningful line
                 line = line.strip()
                 if line:
                     return line[:120]

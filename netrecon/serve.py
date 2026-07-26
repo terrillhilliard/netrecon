@@ -52,6 +52,8 @@ class State:
         self.ai_key = None
         self.ai_model = None
         self.db_path = None
+        self.vt_key = None
+        self.ha_key = None
 
     def session(self) -> dict:
         with self.lock:
@@ -88,7 +90,8 @@ def scan_once(state: State, target: str, ports, timeout: float, db_path: str,
     for ip in live_sorted:
         mac = arp.get(ip, "")
         ports_map = {
-            str(p): {"port": p, "proto": "tcp", "service": enrich.service_name(p), "banner": ""}
+            str(p): {"port": p, "proto": "tcp", "service": enrich.service_name(p),
+                     "banner": enrich.banner(ip, p)}
             for p in scan_res.get(ip, [])
         }
         host = {
@@ -292,6 +295,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/mitm/stop":
             self._json(stop_mitm(self.state))
             return
+        if path == "/api/intel":
+            try:
+                data = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                data = {}
+            indicator = (data.get("indicator") or "").strip()
+            if not indicator:
+                self._json({"error": "empty indicator"}, 400)
+                return
+            from . import intel
+            try:
+                self._json(intel.lookup(indicator, vt_key=self.state.vt_key, ha_key=self.state.ha_key))
+            except Exception as e:
+                self._json({"error": f"intel lookup failed: {e}"}, 502)
+            return
         if path == "/api/ask":
             try:
                 data = json.loads(body or b"{}")
@@ -323,11 +341,13 @@ def make_handler(state: State):
 
 def serve(host="127.0.0.1", port=8081, target=None, ports=None, timeout=0.6,
           db_path=None, rescan=60, monitor_on=False, open_browser=True, iface=None,
-          ai_key=None, ai_model=None) -> None:
+          ai_key=None, ai_model=None, vt_key=None, ha_key=None) -> None:
     state = State()
     state.ai_key = ai_key
     state.ai_model = ai_model
     state.db_path = db_path or store.DEFAULT_DB
+    state.vt_key = vt_key
+    state.ha_key = ha_key
     if iface and iface.get("ipv4"):
         state.interface = {"ipv4": iface["ipv4"], "mac": iface.get("mac") or _self_mac(),
                            "hostname": socket.gethostname()}

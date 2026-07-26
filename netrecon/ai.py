@@ -17,13 +17,21 @@ API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_MODEL = "claude-sonnet-5"
 
 SYSTEM = (
-    "You are a senior network security analyst embedded in 'netrecon', a LAN "
-    "reconnaissance and monitoring tool. Answer the operator's question using the "
-    "provided live network data plus your security knowledge. Be accurate, concise, "
-    "and practical. When flagging risk, name the specific host/IP and port. Suggest "
-    "concrete next steps (including netrecon commands like `netrecon scan <ip>`, "
-    "`netrecon mitm <ip>`, `netrecon monitor`) where useful. If the data is "
-    "insufficient to answer, say so rather than guessing."
+    "You are a senior offensive+defensive security analyst embedded in 'netrecon', a LAN "
+    "reconnaissance and monitoring tool. Answer the operator's question using the provided "
+    "live network data plus your security knowledge. Be accurate, concise, and practical; "
+    "name the specific host/IP and port when flagging anything.\n\n"
+    "VULNERABILITY FOCUS: the data includes detected service banners/versions (e.g. "
+    "'OpenSSH 8.4', 'nginx/1.24', 'vsftpd 2.3.4'). For each notable service, identify:\n"
+    "  - likely KNOWN VULNERABILITIES (name CVE IDs and severity when reasonably confident);\n"
+    "  - whether PUBLIC EXPLOITS exist (Metasploit module path, Exploit-DB, or 'PoC only'), "
+    "without providing weaponized exploit code;\n"
+    "  - the FIXED/updated version and the concrete remediation ('upgrade X to >= Y').\n"
+    "Rank findings by exploitability and impact. State your confidence, and recommend the "
+    "operator verify against live feeds (NVD/CVE, Exploit-DB, vendor advisories) since your "
+    "knowledge has a training cutoff. Suggest netrecon next steps (`netrecon scan <ip>`, "
+    "`netrecon flows`) and, only for authorized testing, the relevant tool/technique names. "
+    "If data is insufficient, say so rather than guessing."
 )
 
 
@@ -41,9 +49,15 @@ def build_context(session: dict, events: Optional[list] = None) -> str:
     hosts = (session.get("lan", {}) or {}).get("hosts", [])
     lines.append(f"{len(hosts)} hosts discovered:")
     for h in hosts[:50]:
-        ports = list(((h.get("meta", {}) or {}).get("values", {}) or {}).get("ports", {}).keys())
+        pmap = ((h.get("meta", {}) or {}).get("values", {}) or {}).get("ports", {}) or {}
+        pstrs = []
+        for k, v in pmap.items():
+            s = f"{v.get('port', k)}/{v.get('service', '') or 'tcp'}"
+            if v.get("banner"):
+                s += f" [{v['banner']}]"
+            pstrs.append(s)
         lines.append(f"  - {h.get('ipv4', '')}  {h.get('hostname', '') or '-'}  "
-                     f"[{h.get('vendor', '') or 'unknown'}]  ports: {', '.join(ports) or 'none'}")
+                     f"[{h.get('vendor', '') or 'unknown'}]  ports: {', '.join(pstrs) or 'none'}")
     pkts = session.get("packets", {}) or {}
     stats = pkts.get("stats", {}) or {}
     if stats.get("pkts_received"):
