@@ -191,7 +191,7 @@ def start_mitm(state: State, target: str) -> dict:
         state.add_event("http", {"ipv4": client, "hostname": host})
 
     try:
-        sess = mitm_mod.MitmSession(target, gw, iface=None,
+        sess = mitm_mod.MitmSession(target, gw, iface_ip=state.interface.get("ipv4"),
                                     on_flow=on_flow, on_dns=on_dns, on_http=on_http)
         sess.start()
     except ImportError:

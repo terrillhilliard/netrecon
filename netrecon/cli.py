@@ -264,7 +264,7 @@ def cmd_mitm(args) -> None:
     def on_http(client, host):
         output.note(f"HTTP {client} -> {host}")
 
-    sess = mitm.MitmSession(args.target, gw, iface=None,
+    sess = mitm.MitmSession(args.target, gw, iface_ip=iface["ipv4"],
                             on_flow=on_flow, on_dns=on_dns, on_http=on_http)
     output.note(f"[bold red]MITM[/] {args.target} <-> {gw} on {iface['name']} - "
                 f"forwarding + capturing. Ctrl-C to stop.")

@@ -33,6 +33,21 @@ def http_host(raw: bytes) -> Optional[str]:
     return None
 
 
+def scapy_iface_for(ip: Optional[str]):
+    """Resolve the Scapy interface object whose IPv4 matches `ip` (else None →
+    Scapy's default, which may be a VPN/virtual adapter — so pass a real IP)."""
+    if not ip:
+        return None
+    s = _scapy()
+    try:
+        for iface in s.conf.ifaces.values():
+            if getattr(iface, "ip", None) == ip:
+                return iface
+    except Exception:
+        pass
+    return None
+
+
 def get_mac(ip: str, iface=None) -> Optional[str]:
     s = _scapy()
     ans, _ = s.srp(
@@ -47,12 +62,13 @@ def get_mac(ip: str, iface=None) -> Optional[str]:
 class MitmSession:
     """Controllable ARP-spoof MITM session with forwarding + analysis callbacks."""
 
-    def __init__(self, target_ip: str, gateway_ip: str, iface=None,
+    def __init__(self, target_ip: str, gateway_ip: str, iface_ip=None,
                  on_flow: Optional[Callable] = None, on_dns: Optional[Callable] = None,
                  on_http: Optional[Callable] = None):
         self.target_ip = target_ip
         self.gateway_ip = gateway_ip
-        self.iface = iface
+        self.iface_ip = iface_ip     # bind to the adapter with this IPv4
+        self.iface = None            # resolved Scapy interface at start()
         self.on_flow = on_flow
         self.on_dns = on_dns
         self.on_http = on_http
@@ -65,6 +81,7 @@ class MitmSession:
 
     def start(self) -> None:
         s = _scapy()
+        self.iface = scapy_iface_for(self.iface_ip)  # bind to the chosen adapter
         self.our_mac = s.get_if_hwaddr(self.iface) if self.iface else s.get_if_hwaddr(s.conf.iface)
         self.target_mac = get_mac(self.target_ip, self.iface)
         self.gateway_mac = get_mac(self.gateway_ip, self.iface)
