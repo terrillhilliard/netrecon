@@ -3,7 +3,7 @@
 import socket
 import struct
 
-from netrecon import ai, enrich, ingest, intel, mitm, monitor, net, scanner, watch
+from netrecon import ai, arpwatch, enrich, ingest, intel, mitm, monitor, net, scanner, watch
 
 
 def _dns_packet(name, src="192.168.1.50", dst="8.8.8.8"):
@@ -133,6 +133,24 @@ def test_intel_links():
     lk = intel.links("8.8.8.8", "ip")
     assert "virustotal.com" in lk["virustotal"] and "hybrid-analysis.com" in lk["hybrid"]
     assert intel.links("a" * 64, "hash")["anyrun"].startswith("https://any.run/report/")
+
+
+def test_arpwatch_gateway_mac_change():
+    prev = {"192.168.1.1": "aa:aa:aa:aa:aa:aa", "192.168.1.5": "bb:bb:bb:bb:bb:bb"}
+    cur = {"192.168.1.1": "cc:cc:cc:cc:cc:cc", "192.168.1.5": "bb:bb:bb:bb:bb:bb"}
+    alerts = arpwatch.analyze(prev, cur, gateway_ip="192.168.1.1")
+    assert len(alerts) == 1 and alerts[0]["kind"] == "mac-change" and alerts[0]["severity"] == 1
+
+
+def test_arpwatch_no_change():
+    m = {"192.168.1.1": "aa:aa:aa:aa:aa:aa"}
+    assert arpwatch.analyze(m, m, "192.168.1.1") == []
+
+
+def test_arpwatch_impersonation():
+    cur = {"10.0.0.2": "de:ad:be:ef:00:01", "10.0.0.3": "de:ad:be:ef:00:01",
+           "10.0.0.4": "de:ad:be:ef:00:01"}
+    assert any(a["kind"] == "mac-impersonation" for a in arpwatch.analyze({}, cur))
 
 
 def test_ai_build_context():

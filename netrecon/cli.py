@@ -325,6 +325,27 @@ def cmd_dns(args) -> None:
         output.note(f"{len(rows)} DNS name(s) in [dim]{args.db}[/]")
 
 
+def cmd_arpwatch(args) -> None:
+    from . import arpwatch
+
+    iface = net.select_interface(getattr(args, "iface", None))
+    gw = args.gateway or iface.get("gateway") or ""
+    output.note(f"watching ARP on [bold]{iface['name']}[/] (gateway {gw or '?'}) "
+                f"every {args.interval}s - detects MITM/spoofing. Ctrl-C to stop.")
+
+    def on_alert(a):
+        sev = "HIGH" if a.get("severity") == 1 else "MED"
+        output.note(f"[bold red]ARP ALERT[/] [{sev}] {a['msg']}")
+        if args.ntfy:
+            from .watch import notify_ntfy
+            notify_ntfy(args.ntfy, f"netrecon ARP alert ({sev})", a["msg"])
+
+    try:
+        arpwatch.watch(interval=args.interval, gateway_ip=gw, on_alert=on_alert)
+    except KeyboardInterrupt:
+        output.note("stopped")
+
+
 def cmd_gui(args) -> None:
     from . import gui
     gui.main()
@@ -429,6 +450,13 @@ def build_parser() -> argparse.ArgumentParser:
     al.add_argument("--json", action="store_true")
     al.add_argument("--db", default=store.DEFAULT_DB)
     al.set_defaults(func=cmd_alerts)
+
+    aw = sub.add_parser("arpwatch", help="detect ARP-spoofing / MITM (passive; works on Wi-Fi, no admin)")
+    aw.add_argument("--iface", help="interface name or IP (default: auto)")
+    aw.add_argument("--gateway", help="gateway IP to watch (default: from the interface)")
+    aw.add_argument("--interval", type=int, default=5, help="seconds between checks (default 5)")
+    aw.add_argument("--ntfy", help="ntfy topic or URL for phone push alerts")
+    aw.set_defaults(func=cmd_arpwatch)
 
     sub.add_parser("gui", help="open the point-and-click launcher window").set_defaults(func=cmd_gui)
 

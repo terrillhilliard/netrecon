@@ -159,6 +159,7 @@
   .ev .tagn{min-width:150px}
   .ev .msg{opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tg-new{color:var(--neon)} .tg-lost{color:var(--red)} .tg-sys{color:var(--neon2)} .tg-wifi{color:var(--violet)} .tg-mod{color:var(--amber)}
+  .tg-arp{color:var(--red);font-weight:700}
   .meters{padding:12px;display:flex;flex-direction:column;gap:12px}
   .meter .top{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);letter-spacing:1px}
   .meter .top b{color:var(--neon2);font-size:14px}
@@ -338,6 +339,38 @@
     -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);}
   .navb.on{-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
   .aimsg{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  /* ============================ MOBILE / RESPONSIVE ============================ */
+  @media (max-width:820px){
+    html,body{overflow:auto}
+    .shell{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;min-height:100vh}
+    .sidebar{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;
+      border-right:none;border-bottom:1px solid var(--glass-brd);position:sticky;top:0;z-index:20}
+    .side-brand{font-size:12px;margin:0 6px 0 0;line-height:1.2;white-space:nowrap}
+    .side-brand br{display:none}
+    .nav{flex-direction:row;flex-wrap:nowrap;gap:5px;flex:1 1 100%;order:3;margin-top:6px;overflow-x:auto;padding-bottom:2px}
+    .nav .navb{flex:0 0 auto;padding:8px 11px;font-size:10px;letter-spacing:1px}
+    .nav > div[style*="flex:1"]{display:none}
+    .side-foot{flex-direction:row;flex:0 0 auto;gap:6px;margin:0;align-items:center}
+    .side-foot .pill{padding:5px 9px}
+    .side-foot .sbtn{width:auto!important;padding:8px 10px}
+    .content{height:auto;min-height:0;padding:8px;gap:8px}
+    .topbar{flex-wrap:wrap;gap:8px;padding:8px 10px}
+    .topbar > div:first-child{min-width:0!important;flex:1 1 100%}
+    #cmdBar{flex:1 1 100%!important;min-width:0;order:9}
+    .viewport{position:static;flex:none;min-height:0}
+    .view{position:static;display:none}
+    .view.on{position:static;display:flex!important;flex-direction:column;gap:8px;height:auto}
+    .view.on .panel{min-height:300px}
+    #view-overview,#view-hosts,#view-traffic,#view-ai,#view-intel{
+      grid-template-columns:1fr!important;grid-template-rows:none!important}
+    #view-overview .radarpanel{grid-row:auto!important;grid-column:auto!important}
+    #view-traffic .eventspanel{grid-column:auto!important}
+    .foot,.intel{grid-template-columns:1fr!important;height:auto!important}
+    .drawer{width:100vw;max-width:100vw}
+    .about-card{width:96vw} .scan-card{width:96vw;height:88vh}
+    #radarWrap{min-height:280px}
+    body::before{filter:blur(30px)}
+  }
 </style>
 </head>
 <body>
@@ -622,7 +655,7 @@ const num=n=>(+n||0).toLocaleString();
 function ago(t){if(!t)return"—";const s=(Date.now()-new Date(t).getTime())/1000;if(s<0||!isFinite(s))return"now";if(s<60)return Math.floor(s)+"s";if(s<3600)return Math.floor(s/60)+"m";return Math.floor(s/3600)+"h";}
 function hhmmss(ms){ms=Math.max(0,ms);const s=Math.floor(ms/1000);const h=String(Math.floor(s/3600)).padStart(2,"0");const m=String(Math.floor(s%3600/60)).padStart(2,"0");const ss=String(s%60).padStart(2,"0");return `${h}:${m}:${ss}`;}
 function hash(str){let h=2166136261;for(let i=0;i<(str||"").length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
-function tagClass(t){t=t||"";if(t.includes("new"))return"tg-new";if(t.includes("lost"))return"tg-lost";if(t.startsWith("wifi"))return"tg-wifi";if(t.startsWith("mod"))return"tg-mod";return"tg-sys";}
+function tagClass(t){t=t||"";if(t.startsWith("arp"))return"tg-arp";if(t.includes("new"))return"tg-new";if(t.includes("lost"))return"tg-lost";if(t.startsWith("wifi"))return"tg-wifi";if(t.startsWith("mod"))return"tg-mod";return"tg-sys";}
 function evMsg(e){const d=e.data;if(d&&typeof d==="object"){if(d.ipv4||d.mac)return `${d.ipv4||""} ${d.hostname||d.vendor||d.mac||""}`.trim();if(d.essid||d.hostname)return d.essid||d.hostname;if(d.message||d.prompt)return d.message||d.prompt;}return typeof d==="string"?d:"";}
 
 // state
@@ -727,6 +760,9 @@ function renderEvents(ev){
     div.innerHTML=`<span class="t">${ts}</span><span class="tagn ${tagClass(e.tag)}">${esc(e.tag)}</span><span class="msg">${esc(evMsg(e))}</span>`;
     feed.appendChild(div);}
   feed.scrollTop=feed.scrollHeight; $("#evCount").textContent=evList.length;
+  const arpEvs=evList.filter(e=>e.tag==="arp.alert");
+  if(arpEvs.length){const last=arpEvs[arpEvs.length-1];const key=(last.time||"")+((last.data&&last.data.hostname)||"");
+    if(key!==window.__lastArp){window.__lastArp=key;toast("⚠ ARP SPOOF DETECTED: <b>"+esc((last.data&&last.data.hostname)||"")+"</b>","err");}}
 }
 let peakTx=1,peakRx=1;
 function renderTraffic(tx,rx,pk,protos){

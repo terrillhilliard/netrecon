@@ -364,6 +364,17 @@ def serve(host="127.0.0.1", port=8081, target=None, ports=None, timeout=0.6,
     threading.Thread(target=_scanner_loop,
                      args=(state, target, ports, timeout, db_path, rescan, stop),
                      daemon=True).start()
+
+    # always-on ARP-spoof / MITM detector (passive, no admin, works on Wi-Fi)
+    def _arp_alert(a):
+        state.add_event("arp.alert", {"ipv4": a.get("ip", ""), "hostname": a["msg"]})
+
+    def _arp_loop():
+        from . import arpwatch
+        arpwatch.watch(interval=6, gateway_ip=state.gateway.get("ipv4", ""),
+                       on_alert=_arp_alert, should_stop=stop.is_set)
+
+    threading.Thread(target=_arp_loop, daemon=True).start()
     if monitor_on:
         threading.Thread(target=_monitor_loop,
                          args=(state, state.interface["ipv4"], stop), daemon=True).start()
