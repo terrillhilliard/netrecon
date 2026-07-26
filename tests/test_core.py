@@ -3,7 +3,7 @@
 import socket
 import struct
 
-from netrecon import enrich, monitor, net, scanner
+from netrecon import enrich, monitor, net, scanner, watch
 
 
 def _dns_packet(name, src="192.168.1.50", dst="8.8.8.8"):
@@ -64,3 +64,13 @@ def test_service_name():
 
 def test_top_ports():
     assert 80 in scanner.TOP_PORTS and 443 in scanner.TOP_PORTS and 22 in scanner.TOP_PORTS
+
+
+def test_ntfy_url():
+    assert watch.ntfy_url("my-topic") == "https://ntfy.sh/my-topic"
+    assert watch.ntfy_url("https://ntfy.example.com/t") == "https://ntfy.example.com/t"
+
+
+def test_host_key():
+    assert watch._host_key("aa:bb:cc:dd:ee:ff", "1.2.3.4") == "aa:bb:cc:dd:ee:ff"
+    assert watch._host_key("", "1.2.3.4") == "ip:1.2.3.4"

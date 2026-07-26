@@ -7,7 +7,7 @@ import sys
 import time
 from typing import List, Optional
 
-from . import __version__, discovery, enrich, net, output, scanner, store
+from . import __version__, net, output, recon, scanner, store
 
 
 def _resolve_ports(args) -> List[int]:
@@ -32,45 +32,19 @@ def cmd_scan(args) -> None:
     iface = net.select_interface(getattr(args, "iface", None))
     target = args.target or net.subnet_for(iface["ipv4"])
     output.note(f"interface [bold]{iface['name']}[/] ({iface['ipv4']})")
-    targets = net.expand_targets(target)
-    output.note(f"discovering {len(targets)} address(es) on [bold]{target}[/] ...")
+    ports = _resolve_ports(args)
+    output.note(f"scanning [bold]{target}[/] - "
+                f"{'all 65535' if args.full else len(ports)} ports/host ...")
 
     t0 = time.time()
-    live = set(discovery.discover(targets, workers=args.workers, timeout_ms=args.ping_timeout))
-    arp = discovery.arp_table()
-    # add ping-silent hosts that the ARP cache already knows about
-    tset = set(targets)
-    live.update(ip for ip in arp if ip in tset)
-    live_sorted = net.sort_ips(live)
+    hosts = recon.gather(target, ports, timeout=args.timeout, banners=args.banners,
+                         workers=args.workers, ping_timeout=args.ping_timeout,
+                         concurrency=args.concurrency)
+    elapsed = time.time() - t0
 
-    if not live_sorted:
+    if not hosts:
         output.note("no live hosts found (try --ping-timeout 1200 or check the interface).")
         return
-
-    output.note(f"[green]{len(live_sorted)}[/] host(s) up - scanning "
-                f"{'all 65535' if args.full else len(_resolve_ports(args))} ports each ...")
-    ports = _resolve_ports(args)
-    scan_res = scanner.scan(live_sorted, ports, timeout=args.timeout, concurrency=args.concurrency)
-
-    hosts = []
-    for ip in live_sorted:
-        mac = arp.get(ip, "")
-        host = {
-            "ip": ip,
-            "mac": mac,
-            "vendor": enrich.vendor(mac) if mac else "",
-            "hostname": enrich.hostname(ip),
-            "ports": [],
-        }
-        for p in scan_res.get(ip, []):
-            host["ports"].append({
-                "port": p,
-                "service": enrich.service_name(p),
-                "banner": enrich.banner(ip, p) if args.banners else "",
-            })
-        hosts.append(host)
-
-    elapsed = time.time() - t0
 
     if args.json:
         print(output.to_json(hosts))
@@ -204,6 +178,20 @@ def cmd_interfaces(args) -> None:
         print(f"* default = {chosen['name']}; override with --iface <name|ip>")
 
 
+def cmd_watch(args) -> None:
+    from . import watch as watch_mod
+
+    iface = net.select_interface(getattr(args, "iface", None))
+    target = args.target or net.subnet_for(iface["ipv4"])
+    ports = _resolve_ports(args)
+    output.note(f"interface [bold]{iface['name']}[/] ({iface['ipv4']})")
+    try:
+        watch_mod.watch(target, ports, timeout=args.timeout, interval=args.interval,
+                        ntfy=args.ntfy, db_path=args.db, once=args.once)
+    except KeyboardInterrupt:
+        output.note("stopped")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="netrecon",
@@ -254,6 +242,18 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--db", default=store.DEFAULT_DB)
     v.add_argument("--no-browser", action="store_true", help="don't auto-open a browser")
     v.set_defaults(func=cmd_serve)
+
+    w = sub.add_parser("watch", help="continuously scan and alert on new devices / new ports")
+    w.add_argument("target", nargs="?", help="CIDR/IP/range (default: selected iface /24)")
+    w.add_argument("--iface", help="interface name or IP (default: auto)")
+    w.add_argument("--interval", type=int, default=60, help="seconds between scans (default 60)")
+    w.add_argument("--ntfy", help="ntfy topic or URL for phone push alerts")
+    w.add_argument("--ports", help="port list e.g. 22,80,443")
+    w.add_argument("--full", action="store_true", help="scan all 65535 ports")
+    w.add_argument("--timeout", type=float, default=0.6)
+    w.add_argument("--db", default=store.DEFAULT_DB)
+    w.add_argument("--once", action="store_true", help="one pass then exit (sets baseline)")
+    w.set_defaults(func=cmd_watch)
 
     i = sub.add_parser("interfaces", help="list network interfaces and the auto-selected default")
     i.add_argument("--iface", help="show which interface this preference would select")
