@@ -147,6 +147,17 @@ def test_arpwatch_no_change():
     assert arpwatch.analyze(m, m, "192.168.1.1") == []
 
 
+def test_nvd_exploit_refs():
+    cve = {"references": [
+        {"url": "https://www.exploit-db.com/exploits/12345", "tags": []},
+        {"url": "https://vendor.example/advisory", "tags": ["Vendor Advisory"]},
+        {"url": "https://ex.example/poc", "tags": ["Exploit"]},
+    ]}
+    urls = nvd._exploit_refs(cve)
+    assert any("exploit-db" in u for u in urls) and "https://ex.example/poc" in urls
+    assert len(urls) == 2
+
+
 def test_nvd_clean_banner():
     assert nvd.clean_banner("SSH-2.0-OpenSSH_8.4") == "OpenSSH 8.4"
     assert nvd.clean_banner("nginx/1.24.0") == "nginx 1.24.0"

@@ -332,8 +332,14 @@ def _print_cves(title, rows) -> None:
         return
     output.note(f"[bold]{title}[/]")
     for c in rows:
-        output.note(f"  {c['id']} [{c['severity'] or '?'} {c['score'] if c['score'] is not None else ''}] "
-                    f"{c['published']} - {c['desc'][:110]}")
+        sev = f"{c['severity'] or '?'} {c['score'] if c['score'] is not None else ''}".strip()
+        if c.get("kev"):
+            mk = " [bold red]* ACTIVELY EXPLOITED[/]"
+        elif c.get("exploits"):
+            mk = " [yellow]* public exploit[/]"
+        else:
+            mk = ""
+        output.note(f"  {c['id']}  {sev}{mk}  {c['published']} - {c['desc'][:100]}")
 
 
 def cmd_vulns(args) -> None:

@@ -18,8 +18,36 @@ import urllib.request
 from typing import List, Optional
 
 API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 _CACHE: dict = {}
 _CACHE_TTL = 3600
+_KEV = {"ts": 0.0, "ids": set()}
+_EXPLOIT_RE = re.compile(r"exploit-db\.com|metasploit|packetstorm|/exploits?/|/poc", re.I)
+
+
+def kev_ids(timeout: int = 15) -> set:
+    """Set of CVE IDs in the CISA Known-Exploited-Vulnerabilities catalog (cached 24h)."""
+    now = time.time()
+    if _KEV["ids"] and now - _KEV["ts"] < 86400:
+        return _KEV["ids"]
+    try:
+        req = urllib.request.Request(KEV_URL, headers={"User-Agent": "netrecon"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read())
+        _KEV["ids"] = {v.get("cveID") for v in data.get("vulnerabilities", []) if v.get("cveID")}
+        _KEV["ts"] = now
+    except Exception:
+        pass
+    return _KEV["ids"]
+
+
+def _exploit_refs(cve: dict):
+    urls = []
+    for ref in cve.get("references", []) or []:
+        url = ref.get("url", "")
+        if "Exploit" in (ref.get("tags", []) or []) or _EXPLOIT_RE.search(url):
+            urls.append(url)
+    return urls[:3]
 
 _PRODUCTS = (r"nginx|apache|lighttpd|Microsoft-IIS|Werkzeug|gunicorn|Jetty|Tomcat|vsftpd|"
              r"ProFTPD|Pure-FTPd|Postfix|Exim|Dovecot|MySQL|MariaDB|PostgreSQL|Redis|"
@@ -78,17 +106,22 @@ def search(keyword: str, limit: int = 5, key: Optional[str] = None, timeout: int
         return [{"error": f"NVD HTTP {e.code} (rate limit? set NVD_API_KEY)"}]
     except Exception as e:
         return [{"error": f"NVD: {e}"}]
+    kev = kev_ids()
     out = []
     for item in data.get("vulnerabilities", [])[:limit]:
         c = item.get("cve", {}) or {}
+        cid = c.get("id", "")
         desc = ""
         for d in c.get("descriptions", []):
             if d.get("lang") == "en":
                 desc = d.get("value", "")
                 break
         sev, score = _cvss(c)
-        out.append({"id": c.get("id", ""), "severity": sev, "score": score,
-                    "published": (c.get("published", "") or "")[:10], "desc": desc[:240]})
+        exploits = _exploit_refs(c)
+        out.append({"id": cid, "severity": sev, "score": score,
+                    "published": (c.get("published", "") or "")[:10], "desc": desc[:240],
+                    "kev": cid in kev, "exploits": exploits,
+                    "has_exploit": bool(exploits) or cid in kev})
     _CACHE[keyword] = (now, out)
     return out
 
@@ -112,6 +145,12 @@ def context_block(hosts: List[dict], key: Optional[str] = None, max_services: in
             continue
         lines.append(f"{kw}:")
         for c in res:
-            lines.append(f"  {c['id']} [{c['severity'] or '?'} {c['score'] if c['score'] is not None else ''}] "
-                         f"{c['published']} - {c['desc']}")
+            mk = []
+            if c.get("kev"):
+                mk.append("ACTIVELY-EXPLOITED (in CISA KEV)")
+            if c.get("exploits"):
+                mk.append(f"PUBLIC-EXPLOIT: {c['exploits'][0]}")
+            mkstr = ("  ⚔ " + "; ".join(mk)) if mk else ""
+            lines.append(f"  {c['id']} [{c['severity'] or '?'} {c['score'] if c['score'] is not None else ''}]"
+                         f"{mkstr}  {c['published']} - {c['desc']}")
     return "\n".join(lines)
