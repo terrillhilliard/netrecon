@@ -510,7 +510,7 @@
           <div class="ph plain">✦ AI ANALYSIS — ASK ABOUT YOUR NETWORK</div>
           <div class="aichat" id="aiChat"></div>
           <div class="aibar">
-            <input id="aiQ" placeholder="e.g. which devices look risky?  ·  what is 192.168.88.165?  ·  summarize my network" spellcheck="false" autocomplete="off">
+            <input id="aiQ" placeholder="e.g. which devices look risky?  ·  what is 192.168.1.20?  ·  summarize my network" spellcheck="false" autocomplete="off">
             <button class="sbtn" id="aiSend">✦ ASK</button>
           </div>
         </div>
@@ -1224,7 +1224,7 @@ async function aiAsk(){
   }catch(e){ if(think)think.remove(); aiAppend("a err","request failed: "+esc(e.message)); }
 }
 if($("#aiSend")){ $("#aiSend").onclick=aiAsk; $("#aiQ").addEventListener("keydown",e=>{if(e.key==="Enter")aiAsk();});
-  aiAppend("a",'<b>✦ netrecon AI analyst.</b> Ask about the devices, ports, and traffic I\'ve found — e.g. <i>"which hosts are risky?"</i>, <i>"what is 192.168.88.165?"</i>, <i>"any signs of a rogue device?"</i>'); }
+  aiAppend("a",'<b>✦ netrecon AI analyst.</b> Ask about the devices, ports, and traffic I\'ve found — e.g. <i>"which hosts are risky?"</i>, <i>"what is 192.168.1.20?"</i>, <i>"any signs of a rogue device?"</i>'); }
 
 // ================= THREAT INTEL =================
 async function sha256File(file){

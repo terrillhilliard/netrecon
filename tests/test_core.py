@@ -49,7 +49,7 @@ def test_expand_targets_full_range_and_single():
 
 
 def test_subnet_for():
-    assert net.subnet_for("192.168.88.145") == "192.168.88.0/24"
+    assert net.subnet_for("192.168.1.50") == "192.168.1.0/24"
 
 
 def test_sort_ips():

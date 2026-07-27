@@ -30,7 +30,7 @@ def local_ipv4() -> str:
 
 
 def default_subnet(prefix: int = 24) -> str:
-    """Auto-detected local subnet in CIDR form, e.g. '192.168.88.0/24'."""
+    """Auto-detected local subnet in CIDR form, e.g. '192.168.1.0/24'."""
     ip = local_ipv4()
     net = ipaddress.ip_network(f"{ip}/{prefix}", strict=False)
     return str(net)
