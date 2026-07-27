@@ -54,6 +54,7 @@ class State:
         self.db_path = None
         self.vt_key = None
         self.ha_key = None
+        self.nvd_key = None
 
     def session(self) -> dict:
         with self.lock:
@@ -319,11 +320,15 @@ class Handler(BaseHTTPRequestHandler):
             if not question:
                 self._json({"error": "empty question"}, 400)
                 return
-            from . import ai
+            from . import ai, nvd
             try:
                 with self.state.lock:
                     events = list(self.state.events)
-                ctx = ai.build_context(self.state.session(), events)
+                sess = self.state.session()
+                ctx = ai.build_context(sess, events)
+                cve = nvd.context_block((sess.get("lan", {}) or {}).get("hosts", []), key=self.state.nvd_key)
+                if cve:
+                    ctx += "\n\nLIVE NVD CVE DATA (current, from services.nvd.nist.gov) — use these real CVEs:\n" + cve
                 answer = ai.ask(question, ctx, model=self.state.ai_model, key=self.state.ai_key)
                 self._json({"answer": answer})
             except RuntimeError as e:
@@ -341,13 +346,14 @@ def make_handler(state: State):
 
 def serve(host="127.0.0.1", port=8081, target=None, ports=None, timeout=0.6,
           db_path=None, rescan=60, monitor_on=False, open_browser=True, iface=None,
-          ai_key=None, ai_model=None, vt_key=None, ha_key=None) -> None:
+          ai_key=None, ai_model=None, vt_key=None, ha_key=None, nvd_key=None) -> None:
     state = State()
     state.ai_key = ai_key
     state.ai_model = ai_model
     state.db_path = db_path or store.DEFAULT_DB
     state.vt_key = vt_key
     state.ha_key = ha_key
+    state.nvd_key = nvd_key
     if iface and iface.get("ipv4"):
         state.interface = {"ipv4": iface["ipv4"], "mac": iface.get("mac") or _self_mac(),
                            "hostname": socket.gethostname()}

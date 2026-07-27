@@ -3,7 +3,7 @@
 import socket
 import struct
 
-from netrecon import ai, arpwatch, enrich, ingest, intel, mitm, monitor, net, scanner, watch
+from netrecon import ai, arpwatch, enrich, ingest, intel, mitm, monitor, net, nvd, scanner, watch
 
 
 def _dns_packet(name, src="192.168.1.50", dst="8.8.8.8"):
@@ -145,6 +145,14 @@ def test_arpwatch_gateway_mac_change():
 def test_arpwatch_no_change():
     m = {"192.168.1.1": "aa:aa:aa:aa:aa:aa"}
     assert arpwatch.analyze(m, m, "192.168.1.1") == []
+
+
+def test_nvd_clean_banner():
+    assert nvd.clean_banner("SSH-2.0-OpenSSH_8.4") == "OpenSSH 8.4"
+    assert nvd.clean_banner("nginx/1.24.0") == "nginx 1.24.0"
+    assert nvd.clean_banner("Apache/2.4.49 (Unix)") == "Apache 2.4.49"
+    assert nvd.clean_banner("") == ""
+    assert nvd.clean_banner("just some words") == ""
 
 
 def test_arpwatch_impersonation():

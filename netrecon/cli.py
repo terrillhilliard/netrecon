@@ -147,6 +147,7 @@ def cmd_serve(args) -> None:
         timeout=args.timeout, db_path=args.db, rescan=args.rescan,
         monitor_on=args.monitor, open_browser=not args.no_browser, iface=iface,
         ai_key=args.ai_key, ai_model=args.ai_model, vt_key=args.vt_key, ha_key=args.ha_key,
+        nvd_key=args.nvd_key,
     )
 
 
@@ -325,6 +326,39 @@ def cmd_dns(args) -> None:
         output.note(f"{len(rows)} DNS name(s) in [dim]{args.db}[/]")
 
 
+def _print_cves(title, rows) -> None:
+    if not rows or rows[0].get("error"):
+        output.note(f"{title}: {rows[0].get('error') if rows else 'no CVEs found'}")
+        return
+    output.note(f"[bold]{title}[/]")
+    for c in rows:
+        output.note(f"  {c['id']} [{c['severity'] or '?'} {c['score'] if c['score'] is not None else ''}] "
+                    f"{c['published']} - {c['desc'][:110]}")
+
+
+def cmd_vulns(args) -> None:
+    from . import nvd
+
+    if args.keyword:
+        _print_cves(args.keyword, nvd.search(args.keyword, limit=args.limit))
+        return
+    con = store.connect(args.db)
+    hosts = store.list_hosts(con)
+    seen, found = set(), False
+    for r in hosts:
+        for p in store.ports_for(con, r["mac"]):
+            kw = nvd.clean_banner(p["banner"] or "")
+            if kw and kw not in seen:
+                seen.add(kw)
+                rows = nvd.search(kw, limit=args.limit)
+                if rows and not rows[0].get("error"):
+                    _print_cves(f"{r['ip']}  {kw}", rows)
+                    found = True
+    con.close()
+    if not found:
+        output.note("no service versions in the inventory - run 'netrecon scan --banners' first")
+
+
 def cmd_arpwatch(args) -> None:
     from . import arpwatch
 
@@ -404,6 +438,7 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--ai-model", help="AI model id (default: claude-sonnet-5)")
     v.add_argument("--vt-key", help="VirusTotal API key for THREAT INTEL (else $VT_API_KEY)")
     v.add_argument("--ha-key", help="Hybrid Analysis API key for THREAT INTEL (else $HYBRID_ANALYSIS_KEY)")
+    v.add_argument("--nvd-key", help="NVD API key for live CVE lookups in the AI tab (else $NVD_API_KEY)")
     v.set_defaults(func=cmd_serve)
 
     w = sub.add_parser("watch", help="continuously scan and alert on new devices / new ports")
@@ -450,6 +485,12 @@ def build_parser() -> argparse.ArgumentParser:
     al.add_argument("--json", action="store_true")
     al.add_argument("--db", default=store.DEFAULT_DB)
     al.set_defaults(func=cmd_alerts)
+
+    vu = sub.add_parser("vulns", help="look up live CVEs (NVD) for a service or your whole inventory")
+    vu.add_argument("keyword", nargs="?", help="e.g. 'OpenSSH 8.4' (default: scan the inventory's banners)")
+    vu.add_argument("--limit", type=int, default=5)
+    vu.add_argument("--db", default=store.DEFAULT_DB)
+    vu.set_defaults(func=cmd_vulns)
 
     aw = sub.add_parser("arpwatch", help="detect ARP-spoofing / MITM (passive; works on Wi-Fi, no admin)")
     aw.add_argument("--iface", help="interface name or IP (default: auto)")

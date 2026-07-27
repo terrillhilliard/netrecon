@@ -4,31 +4,51 @@
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**Network reconnaissance, asset inventory & monitoring — a fast, dependency-light Python CLI, with a live web console.**
+**Network reconnaissance, monitoring & threat-intel — a fast, dependency-light Python toolkit with a live web console.**
 
-`netrecon` discovers live hosts on a subnet, scans their ports, enriches each
-host with MAC-vendor / hostname / service data, passively captures flows + DNS,
-and accumulates everything into a local SQLite **asset inventory** that grows
-across runs. The core needs **no admin, no Npcap, no third-party packages** — it
-uses a concurrent ping sweep, the OS ARP cache, and an async TCP-connect scanner.
-An optional `serve` command hosts a real-time web dashboard on top of the same engine.
+`netrecon` discovers hosts, scans ports and service versions, watches for new
+devices and ARP-spoof attacks, captures traffic, checks indicators against
+threat-intel feeds, looks up live CVEs, and serves a **liquid-glass web
+dashboard with an AI analyst** — all backed by a local SQLite asset inventory.
+The core needs **no admin, no Npcap, no third-party packages**; optional extras
+(`rich`, `scapy`, `mac-vendor-lookup`) unlock nicer output, MITM, and vendor names.
 
 > Built by **Terrill Hilliard** — IT Support & Security Operations · M.S. Cybersecurity · CySA+ / PenTest+.
+> **Live demo:** https://recon-console-theta.vercel.app
 
 ---
 
-## Features
+## Commands
 
-- **`scan`** — concurrent ping + ARP host discovery, async TCP port scan, vendor/hostname/service/banner enrichment.
-- **`monitor`** — passive flow + DNS capture via raw sockets (pure stdlib; needs admin).
-- **`watch`** — continuous rescans that alert on new devices / newly-opened ports (console + optional [ntfy](https://ntfy.sh) phone push).
-- **`serve`** — live web console (radar, host drill-down, port scanner, traffic telemetry) served from the netrecon engine.
-- **`mitm`** — ARP-spoof a device, forward its traffic, and capture flows / DNS / HTTP hosts (Scapy; admin).
-- **`flows` / `dns`** — view captured traffic and DNS queries.
-- **`ingest` / `alerts`** — pull Suricata `eve.json` + Zeek logs into the store and query IDS alerts (the SIEM spine).
-- **`interfaces`** — list adapters and pick which one to use; auto-prefers wired, skips VPN/virtual, switch with `--iface`.
-- **`hosts`** — the accumulated SQLite asset inventory (`first_seen` / `last_seen` / `times_seen`).
-- Clean [rich](https://github.com/Textualize/rich) tables with graceful plain-text fallback, or `--json` for pipelines.
+| Command | What it does |
+|---|---|
+| `netrecon gui` | Point-and-click launcher window (buttons for everything) |
+| `netrecon scan` | Discover hosts → async TCP port scan → vendor / hostname / **service-version** enrichment |
+| `netrecon serve` | **Web console** on the netrecon engine (dashboard + REST API) |
+| `netrecon hosts` | The accumulated SQLite asset inventory |
+| `netrecon watch` | Continuous rescan; alert on new devices (`--ntfy` for phone push) |
+| `netrecon arpwatch` | **Detect ARP-spoofing / MITM** — passive, no admin, works on Wi-Fi |
+| `netrecon monitor` | Passive flow + DNS capture (raw socket; admin) |
+| `netrecon mitm <ip>` | ARP-spoof MITM + traffic capture (Scapy; admin; **wired Ethernet**) |
+| `netrecon flows` / `dns` | View captured traffic / DNS queries |
+| `netrecon vulns [svc]` | **Live CVE lookup (NIST NVD)** for a service or the whole inventory |
+| `netrecon ingest` / `alerts` | Pull Suricata/Zeek logs into the store & query IDS alerts |
+| `netrecon interfaces` | List adapters; auto-prefers wired, `--iface` to switch |
+
+## Web console (`netrecon serve`)
+
+A self-contained **liquid-glass** dashboard, mobile-responsive, running on your
+real data:
+
+- **Overview** — sonar radar, on-device analyzer, router/ISP intel
+- **Hosts** — drill-down drawer with one-click **MITM** and copyable CLI
+- **Nmap Scan** — open ports **with detected versions**
+- **Traffic** — router-link telemetry, live bytes/sec, captured DNS/HTTP
+- **AI Analysis** — chat that answers questions about your network and hunts
+  **vulnerabilities/exploits**, grounded in **live NVD CVE data** for detected versions
+- **Threat Intel** — check an IP / domain / URL / dropped file (hashed locally)
+  against **VirusTotal + Hybrid Analysis** with pivot links to ANY.RUN
+- **ARP-spoof banner** — a red alert across the top the moment a MITM is detected
 
 ## Install
 
@@ -36,70 +56,38 @@ An optional `serve` command hosts a real-time web dashboard on top of the same e
 git clone https://github.com/terrillhilliard/netrecon
 cd netrecon
 python -m venv .venv
-.venv\Scripts\activate        # Windows   (source .venv/bin/activate on *nix)
-pip install -e .              # optional extras: rich (color) + mac-vendor-lookup (vendor names)
+.venv\Scripts\activate           # Windows   (source .venv/bin/activate on *nix)
+pip install -e .                 # optional extras: rich, scapy, mac-vendor-lookup
 ```
 
-The core runs on pure stdlib even without the optional packages.
+Optional API keys (env vars or `serve --*-key`): `ANTHROPIC_API_KEY` (AI tab),
+`VT_API_KEY` / `HYBRID_ANALYSIS_KEY` (Threat Intel), `NVD_API_KEY` (raises the
+CVE lookup rate limit).
 
 ## Usage
 
 ```bash
-netrecon interfaces                        # see adapters + the auto-selected default
-netrecon scan                              # scan the selected interface's /24
-netrecon scan --iface Wi-Fi                # pick a specific interface (name or IP)
-netrecon scan 192.168.1.0/24 --banners     # explicit target + banner grabbing
-netrecon scan 10.0.0.1 --full --json       # all 65535 ports, JSON out
-netrecon monitor --duration 30             # 30s passive flow + DNS capture (admin)
-netrecon watch --interval 30 --ntfy my-lan # rescan every 30s; push new-device alerts to your phone
-netrecon serve                             # open the live web dashboard (http://127.0.0.1:8081)
-netrecon serve --iface eth0 --monitor      # bind an interface + live traffic capture
-netrecon ingest /var/log/suricata/eve.json # pull sensor logs into the store (auto-detects format)
-netrecon alerts --severity 1               # show high-severity IDS alerts
-netrecon hosts                             # review the accumulated inventory
+netrecon scan --banners                     # hosts, ports + service versions
+netrecon serve                              # dashboard at http://127.0.0.1:8081
+netrecon arpwatch --ntfy my-lan             # get pinged if someone MITMs you
+netrecon vulns "OpenSSH 8.4"                 # live CVEs for a service
+netrecon watch --iface Wi-Fi                # keep scanning + alert on new devices
 ```
-
-### Example
-
-```
-$ netrecon scan
-[*] interface Wi-Fi (192.168.88.145)
-[*] discovering 254 address(es) on 192.168.88.0/24 ...
-[*] 4 host(s) up - scanning 82 ports each ...
-
-  IP              MAC                Vendor    Hostname        Open Ports
-  192.168.88.1    b8:29:03:66:e6:3e  —         VNPT.lan        22/ssh, 53/domain, 80/http, 443/https
-  192.168.88.145  —                  —         XYZ-ULG.lan     135/msrpc, 139/netbios-ssn, 445/microsoft-ds
-  192.168.88.165  cc:98:8b:13:ce:c5  —         —               80/http, 8008/tcp, 8443/https-alt, 9000/tcp
-  192.168.88.174  ae:56:bc:24:6a:4e  —         Galaxy-A20.lan  —
-
-[+] 4 hosts up | 11 open ports | 8.9s | target 192.168.88.0/24
-```
-
-## Web dashboard
-
-`netrecon serve` hosts a self-contained **liquid-glass** web console — sonar radar,
-host drill-down with one-click **MITM**, an Nmap-style port view, live traffic
-telemetry, a **SIEM** alerts tab (from `netrecon ingest`), and an **AI ANALYSIS**
-tab that answers questions about your live network (set `ANTHROPIC_API_KEY` or
-`--ai-key`). It rescans on an interval and, with `--monitor`, streams live traffic
-and DNS events. Data persists to `~/.netrecon/netrecon.db`.
 
 ## Roadmap
 
 | Phase | Capability | Status |
 |-------|-----------|--------|
-| 0.1 | discovery + port scan + SQLite inventory | ✅ done |
-| 0.2 | `monitor` — passive flow/DNS capture | ✅ done |
-| 0.3 | `watch` — new-device / new-port alerts → ntfy | ✅ done |
-| 0.4 | `serve` — web console on the netrecon engine | ✅ done |
-| 0.5 | `ingest` / `alerts` — Suricata + Zeek → SQLite SIEM spine | ✅ done |
-| 0.6 | threat-intel enrichment, anomaly scoring, alerts in the dashboard | planned |
+| 0.1–0.4 | discovery · port scan · monitor · watch · SIEM ingest · web console | ✅ done |
+| 0.5 | rebrand · MITM · AI analyst · liquid-glass UI | ✅ done |
+| 0.6 | GUI launcher · Threat Intel · service versions · CVE-aware AI | ✅ done |
+| 0.7 | ARP-spoof detector · mobile UI · **live NVD/CVE feed** | ✅ done |
+| next | anomaly scoring · exploit-availability enrichment | planned |
 
 ## Legal
 
-Only scan or monitor networks you own or are explicitly authorized to test.
-Unauthorized scanning may be illegal in your jurisdiction. This tool is for
-defensive security, asset management, and authorized assessment.
+Only scan, monitor, or MITM networks you own or are explicitly authorized to
+test. Unauthorized use may be illegal in your jurisdiction. For defensive
+security, asset management, and authorized assessment only.
 
 MIT © 2026 Terrill Hilliard
