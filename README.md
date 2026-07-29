@@ -42,6 +42,8 @@ The core needs **no admin, no Npcap, no third-party packages**; optional extras
 A self-contained **liquid-glass** dashboard, mobile-responsive, running on your
 real data:
 
+<p align="center"><img src="assets/console.gif" alt="netrecon web console: live sonar radar sweep" width="760"></p>
+
 - **Overview** — sonar radar, on-device analyzer, router/ISP intel
 - **Hosts** — drill-down drawer with one-click **MITM** and copyable CLI
 - **Nmap Scan** — open ports **with detected versions**
