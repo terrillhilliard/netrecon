@@ -6,6 +6,8 @@
 
 **Network reconnaissance, monitoring & threat-intel — a fast, dependency-light Python toolkit with a live web console.**
 
+<p align="center"><img src="assets/demo.gif" alt="netrecon demo: scan + live CVE lookup" width="760"></p>
+
 `netrecon` discovers hosts, scans ports and service versions, watches for new
 devices and ARP-spoof attacks, captures traffic, checks indicators against
 threat-intel feeds, looks up live CVEs, and serves a **liquid-glass web
