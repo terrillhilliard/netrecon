@@ -57,12 +57,16 @@ git clone https://github.com/terrillhilliard/netrecon
 cd netrecon
 python -m venv .venv
 .venv\Scripts\activate           # Windows   (source .venv/bin/activate on *nix)
-pip install -e .                 # optional extras: rich, scapy, mac-vendor-lookup
+pip install -e .                 # installs rich, mac-vendor-lookup, scapy
 ```
 
-Optional API keys (env vars or `serve --*-key`): `ANTHROPIC_API_KEY` (AI tab),
+**Packet driver (for `mitm` / `monitor` capture):** [Npcap](https://npcap.com) on
+Windows, or `libpcap` on Linux/macOS. Everything else — scan, serve, watch,
+arpwatch, threat intel, CVE lookups — needs no driver and no admin.
+
+**Optional API keys** (env vars or `serve --*-key`): `ANTHROPIC_API_KEY` (AI tab),
 `VT_API_KEY` / `HYBRID_ANALYSIS_KEY` (Threat Intel), `NVD_API_KEY` (raises the
-CVE lookup rate limit).
+CVE lookup rate limit). All threat-intel/AI/CVE calls use only the stdlib.
 
 ## Usage
 

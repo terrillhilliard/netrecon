@@ -1,2 +1,9 @@
+# Runtime dependencies. The core works on the stdlib alone; these add polish + MITM.
 rich>=13
 mac-vendor-lookup>=0.1.12
+scapy>=2.5
+
+# Notes:
+#   - scapy's MITM/capture also needs a packet driver: Npcap (Windows) or libpcap (*nix).
+#   - AI ANALYSIS / THREAT INTEL / live CVE feeds use only the stdlib (urllib) — no extra
+#     packages; they just need the relevant API keys as environment variables.

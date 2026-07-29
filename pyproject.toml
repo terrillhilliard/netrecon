@@ -14,7 +14,16 @@ classifiers = [
     "Topic :: System :: Networking :: Monitoring",
     "Programming Language :: Python :: 3",
 ]
-dependencies = ["rich>=13", "mac-vendor-lookup>=0.1.12"]
+# The core runs on the Python standard library alone. These add polished output,
+# MAC-vendor names, and ARP-spoof MITM (scapy). Install them all with `pip install -e .`.
+dependencies = [
+    "rich>=13",                  # colored tables / console output
+    "mac-vendor-lookup>=0.1.12", # OUI -> vendor names
+    "scapy>=2.5",                # ARP-spoof MITM (needs Npcap on Windows / libpcap on *nix)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff"]
 
 [project.scripts]
 netrecon = "netrecon.cli:main"
