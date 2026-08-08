@@ -54,6 +54,36 @@ real data:
   against **VirusTotal + Hybrid Analysis** with pivot links to ANY.RUN
 - **ARP-spoof banner** — a red alert across the top the moment a MITM is detected
 
+## Requirements
+
+The **core runs on the Python standard library alone** — no third-party packages,
+no packet driver, and no admin are needed to `scan`, `serve`, `watch`, or `arpwatch`.
+The items below add polish and unlock capture/MITM.
+
+| Requirement | Needed for | Notes |
+|---|---|---|
+| **Python ≥ 3.9** | everything | the only hard requirement |
+| `rich` ≥ 13 | polished CLI tables/output | optional — installed by `pip install -e .` |
+| `mac-vendor-lookup` ≥ 0.1.12 | MAC → vendor names | optional |
+| `scapy` ≥ 2.5 | `mitm`, `monitor` capture | optional |
+| **Npcap** (Windows) / **libpcap** (Linux/macOS) | packet capture (`mitm` / `monitor`) | not needed for scan/serve/watch/arpwatch |
+| **Admin / root** | `monitor`, `mitm` (raw sockets) | discovery, serve, arpwatch need no admin |
+| **Wired Ethernet** | `mitm` only | most Wi-Fi adapters can't ARP-spoof (the AP mediates L2) |
+
+**Optional API keys** (set as an env var, or pass `serve --*-key`) — all use the
+stdlib only, no extra packages:
+
+| Env var | Unlocks |
+|---|---|
+| `ANTHROPIC_API_KEY` | AI Analysis tab |
+| `VT_API_KEY` | VirusTotal in Threat Intel |
+| `HYBRID_ANALYSIS_KEY` | Hybrid Analysis in Threat Intel |
+| `NVD_API_KEY` | higher rate limit for live CVE lookups |
+
+Python dependencies are pinned in [`requirements.txt`](requirements.txt) and
+[`pyproject.toml`](pyproject.toml). Dev extras (`pytest`, `ruff`) install with
+`pip install -e ".[dev]"`.
+
 ## Install
 
 ```bash
