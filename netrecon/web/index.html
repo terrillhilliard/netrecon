@@ -240,8 +240,10 @@
   .navb.on .nc{color:var(--neon2)}
   .side-foot{display:flex;flex-direction:column;gap:8px}
   .content{display:flex;flex-direction:column;min-width:0;height:100vh;padding:12px;gap:10px}
-  .topbar{display:flex;align-items:center;gap:14px;padding:9px 14px;border:1px solid var(--line);border-radius:10px;
+  .topbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:9px 14px;border:1px solid var(--line);border-radius:10px;
     background:linear-gradient(180deg,var(--panel),var(--panel2))}
+  .topbar input{min-width:180px;flex:1 1 240px}   /* wrap filter + scan button to their own row when cramped */
+  .topbar .sbtn{flex:0 0 auto}                     /* NMAP SCAN keeps full size, never clips */
   .topbar input:focus{outline:none;border-color:var(--neon);box-shadow:0 0 8px rgba(0,255,195,.25)}
   .viewport{flex:1;min-height:0;position:relative}
   .view{position:absolute;inset:0;display:none}
@@ -293,31 +295,19 @@
   .aibar{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
   .aibar input{flex:1;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:8px;font-family:inherit;font-size:13px}
   .aibar input:focus{outline:none;border-color:var(--neon2);box-shadow:0 0 8px rgba(0,229,255,.25)}
-  /* THREAT INTEL */
-  #view-intel{grid-template-columns:1fr;grid-template-rows:1fr}
-  .intelbody{flex:1;display:flex;flex-direction:column;min-height:0}
-  .intelbar{display:flex;gap:8px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-  .intelbar #intelQ{flex:1;min-width:220px;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:8px;font-family:inherit;font-size:13px}
-  .intelbar #intelQ:focus{outline:none;border-color:var(--red);box-shadow:0 0 8px rgba(255,77,109,.25)}
-  .inteldrop{padding:10px 14px;border:1px dashed var(--line);border-radius:8px;color:var(--dim);font-size:11px;cursor:pointer;white-space:nowrap}
-  .inteldrop:hover{border-color:var(--neon2);color:var(--neon2)}
-  .intelresult{flex:1;overflow:auto;padding:16px}
-  .intelcard{border:1px solid var(--line);border-radius:12px;padding:16px 18px;max-width:680px}
-  .intelhead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-  .intelkind{padding:2px 10px;border:1px solid var(--neon2);color:var(--neon2);border-radius:20px;font-size:10px;letter-spacing:2px;text-transform:uppercase}
-  .intelind{font-size:15px;color:var(--txt);word-break:break-all}
-  .intelverdict{font-size:14px;font-weight:700;margin:6px 0}
-  .intellinks{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
-  .intellinks a{padding:8px 14px;border:1px solid var(--neon);color:var(--neon);border-radius:8px;text-decoration:none;font-size:12px;letter-spacing:1px}
-  .intellinks a:hover{background:var(--neon);color:var(--bg)}
-  /* AI REPORT / SUMMARY */
+  /* ===== AI REPORT / SUMMARY ===== */
   #view-summary{grid-template-columns:1fr;grid-template-rows:1fr}
-  .sumbody{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
-  .sumcard{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel2)}
-  .sumhead{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:2px;color:var(--neon2);margin-bottom:12px}
-  .sumwhen{margin-left:auto;color:var(--dim);font-size:10px;letter-spacing:1px}
-  .sumtext{font-size:13px;line-height:1.6;color:var(--txt);white-space:pre-wrap;word-break:break-word}
-  .sumtext .aihint{white-space:normal;color:var(--dim)}
+  .sumbody{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:18px}
+  .sumcard{position:relative;border:1px solid var(--line);border-radius:14px;padding:18px 20px 20px 22px;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));overflow:hidden}
+  .sumcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--neon2)}
+  .sumcard.mitm::before{background:var(--amber)}
+  .sumhead{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:2px;font-weight:700;color:var(--neon2);margin-bottom:14px}
+  .sumcard.mitm .sumhead{color:var(--amber)}
+  .sumwhen{margin-left:auto;color:var(--dim);font-size:10px;letter-spacing:1px;font-weight:400}
+  .sumchip{padding:2px 9px;border:1px solid var(--amber);color:var(--amber);border-radius:20px;font-size:9px;letter-spacing:1.5px;font-weight:600}
+  .sumtext{font-size:13px;line-height:1.65;color:var(--txt);white-space:pre-wrap;word-break:break-word}
+  .sumtext .aihint{white-space:normal;color:var(--dim);line-height:1.6}
   /* ============================ LIQUID GLASS ============================ */
   :root,:root[data-theme="dark"]{ --glass:rgba(10,18,27,.5); --glass-brd:rgba(255,255,255,.10); --glass-hi:rgba(255,255,255,.07); }
   :root[data-theme="light"]{ --glass:rgba(255,255,255,.55); --glass-brd:rgba(10,60,50,.14); --glass-hi:rgba(255,255,255,.75); }
@@ -373,7 +363,7 @@
     .view{position:static;display:none}
     .view.on{position:static;display:flex!important;flex-direction:column;gap:8px;height:auto}
     .view.on .panel{min-height:300px}
-    #view-overview,#view-hosts,#view-traffic,#view-ai,#view-intel{
+    #view-overview,#view-hosts,#view-traffic,#view-ai,#view-summary{
       grid-template-columns:1fr!important;grid-template-rows:none!important}
     #view-overview .radarpanel{grid-row:auto!important;grid-column:auto!important}
     #view-traffic .eventspanel{grid-column:auto!important}
@@ -424,7 +414,7 @@
       <div class="demobadge" id="demoBadge" title="About this project"><span class="d"></span>PORTFOLIO DEMO · SYNTHETIC DATA · ⓘ</div>
       <span style="color:var(--neon);font-weight:700;margin-left:6px">›</span>
       <input id="cmdBar" placeholder="filter hosts by IP / hostname / vendor …" spellcheck="false" autocomplete="off"
-        style="flex:1;background:var(--input);border:1px solid var(--line);color:var(--txt);padding:9px 12px;border-radius:7px;font-family:inherit;font-size:13px">
+        style="background:var(--input);border:1px solid var(--line);color:var(--txt);padding:9px 12px;border-radius:7px;font-family:inherit;font-size:13px">
       <button class="sbtn" id="scanBtn">⌗ NMAP SCAN</button>
     </div>
 
@@ -535,8 +525,8 @@
               <div class="sumhead">✦ NETWORK SUMMARY <span class="sumwhen" id="sumNetWhen"></span></div>
               <div class="sumtext" id="sumNetText"><div class="aihint">The AI writes a full security report after each scan — major vulnerabilities, known CVEs, real-world attack examples, and how to patch or mitigate them. Launch <b>netrecon serve</b> with an <b>ANTHROPIC_API_KEY</b> to enable it.</div></div>
             </div>
-            <div class="sumcard" id="sumMitm">
-              <div class="sumhead">⚡ MITM RESULTS <span class="sumwhen" id="sumMitmWhen"></span></div>
+            <div class="sumcard mitm" id="sumMitm">
+              <div class="sumhead">⚡ MITM RESULTS <span class="sumchip">AUTHORIZED USE ONLY</span><span class="sumwhen" id="sumMitmWhen"></span></div>
               <div class="sumtext" id="sumMitmText"><div class="aihint">Run a MITM on a device (HOSTS → drill-down → MITM), then stop it. When it stops, the captured DNS/HTTP/traffic is summarized here — what the device was doing, notable destinations, and anything risky. <b>Authorized, ethical testing only.</b></div></div>
             </div>
           </div>
