@@ -128,7 +128,7 @@ netrecon mitm 192.168.1.50 --dns-spoof login.example.com=192.168.1.9   # DNS spo
 | 0.5 | rebrand · MITM · AI analyst · liquid-glass UI | ✅ done |
 | 0.6 | GUI launcher · Threat Intel · service versions · CVE-aware AI | ✅ done |
 | 0.7 | ARP-spoof detector · mobile UI · **live NVD/CVE feed** | ✅ done |
-| 0.10 | **AI security report per scan** (CVEs + real attacks + fixes) · **DNS spoofing** · MITM AI summary | ✅ done |
+| **1.0** | **AI security report per scan** (CVEs + real attacks + fixes) · **DNS spoofing** · MITM AI summary | ✅ **released** |
 | next | anomaly scoring · exploit-availability enrichment | planned |
 
 ## Legal
