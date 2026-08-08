@@ -59,6 +59,42 @@ def cmd_scan(args) -> None:
         if not args.json:
             output.note(f"saved to [dim]{args.db}[/]")
 
+    if not args.json and not getattr(args, "no_ai_summary", False):
+        _ai_network_summary(hosts, iface, args)
+
+
+def _ai_network_summary(hosts: List[dict], iface: dict, args) -> None:
+    """Generate and print a full AI summary of the scan (needs an Anthropic key)."""
+    from . import ai
+
+    key = getattr(args, "ai_key", None) or ai.api_key()
+    if not key:
+        output.note("[dim]AI summary skipped — set ANTHROPIC_API_KEY or pass --ai-key "
+                    "(disable with --no-ai-summary).[/]")
+        return
+
+    ctx = ai.context_from_scan(hosts, interface=iface, gateway=iface.get("gateway", ""))
+    if args.banners:
+        try:  # enrich with live CVEs for detected service versions
+            from . import nvd
+            shaped = [{"meta": {"values": {"ports": {
+                str(p["port"]): {"banner": p.get("banner", "")} for p in h.get("ports", [])}}}}
+                for h in hosts]
+            cve = nvd.context_block(shaped, key=getattr(args, "nvd_key", None))
+            if cve:
+                ctx += ("\n\nLIVE NVD CVE DATA (current, from services.nvd.nist.gov) — "
+                        "use these real CVEs:\n" + cve)
+        except Exception:
+            pass
+
+    output.note("generating AI network summary ...")
+    try:
+        text = ai.summarize(ctx, model=getattr(args, "ai_model", None), key=key)
+    except Exception as e:
+        output.note(f"[yellow]AI summary unavailable:[/] {e}")
+        return
+    output.print_ai_summary(text)
+
 
 def cmd_hosts(args) -> None:
     con = store.connect(args.db)
@@ -238,6 +274,22 @@ def cmd_alerts(args) -> None:
         output.note(f"{len(rows)} alert(s) in [dim]{args.db}[/]")
 
 
+def _build_spoof_map(args) -> dict:
+    """Parse --dns-spoof DOMAIN=IP (repeatable) and --spoof-all IP into a map."""
+    spoof: dict = {}
+    for entry in getattr(args, "dns_spoof", None) or []:
+        if "=" not in entry:
+            output.note(f"[yellow]ignoring bad --dns-spoof '{entry}'[/] (use DOMAIN=IP)")
+            continue
+        domain, ip = entry.split("=", 1)
+        domain, ip = domain.strip(), ip.strip()
+        if domain and ip:
+            spoof[domain] = ip
+    if getattr(args, "spoof_all", None):
+        spoof["*"] = args.spoof_all
+    return spoof
+
+
 def cmd_mitm(args) -> None:
     import collections
     import time as _t
@@ -252,6 +304,7 @@ def cmd_mitm(args) -> None:
 
     flows = collections.defaultdict(lambda: {"packets": 0, "bytes": 0})
     dnsq: "collections.Counter" = collections.Counter()
+    httpq: "collections.Counter" = collections.Counter()
 
     def on_flow(src, dst, proto, dport, length):
         f = flows[(src, dst, proto, dport or 0)]
@@ -263,13 +316,23 @@ def cmd_mitm(args) -> None:
         output.note(f"DNS  {client} -> {qname}")
 
     def on_http(client, host):
+        httpq[host] += 1
         output.note(f"HTTP {client} -> {host}")
 
+    def on_spoof(client, qname, spoof_ip):
+        output.note(f"[bold red]DNS SPOOF[/] {client}  {qname} -> {spoof_ip}")
+
+    dns_spoof = _build_spoof_map(args)
     sess = mitm.MitmSession(args.target, gw, iface_ip=iface["ipv4"],
-                            on_flow=on_flow, on_dns=on_dns, on_http=on_http)
+                            on_flow=on_flow, on_dns=on_dns, on_http=on_http,
+                            dns_spoof=dns_spoof, on_spoof=on_spoof)
     output.note(f"[bold red]MITM[/] {args.target} <-> {gw} on {iface['name']} - "
                 f"forwarding + capturing. Ctrl-C to stop.")
-    output.note("only run against devices you own or are authorized to test.")
+    if dns_spoof:
+        rules = ", ".join(f"{d}->{ip}" for d, ip in dns_spoof.items())
+        output.note(f"[bold red]DNS SPOOF ACTIVE[/] redirecting: {rules}")
+    output.note("[yellow]ETHICAL USE ONLY[/] — only run against devices you own or are "
+                "explicitly authorized to test. Unauthorized use may be illegal.")
     try:
         sess.start()
         while True:
@@ -300,6 +363,32 @@ def cmd_mitm(args) -> None:
     con.close()
     output.note(f"[green]saved[/] {len(flows)} flows, {len(dnsq)} DNS names to [dim]{args.db}[/]")
     output.note("view with: netrecon flows   |   netrecon dns")
+
+    if not getattr(args, "no_ai_summary", False):
+        _ai_mitm_summary(args.target, dnsq, httpq, flows, args)
+
+
+def _ai_mitm_summary(target, dnsq, httpq, flows, args) -> None:
+    """Summarize a finished MITM capture's event stream via AI (needs a key)."""
+    from . import ai
+
+    key = getattr(args, "ai_key", None) or ai.api_key()
+    if not key:
+        output.note("[dim]MITM AI summary skipped — set ANTHROPIC_API_KEY or pass --ai-key.[/]")
+        return
+    dns_hits = sorted(((q, n) for (c, q), n in dnsq.items()), key=lambda kv: kv[1], reverse=True)
+    http_hits = httpq.most_common()
+    tlines = [f"{s} -> {d} {proto} dport={dp}: {v['bytes']} B ({v['packets']} pkts)"
+              for (s, d, proto, dp), v in sorted(flows.items(),
+                                                 key=lambda kv: kv[1]["bytes"], reverse=True)]
+    ctx = ai.build_mitm_context(target, dns_hits=dns_hits, http_hits=http_hits, traffic_lines=tlines)
+    output.note("generating MITM AI summary ...")
+    try:
+        text = ai.summarize_mitm(ctx, model=getattr(args, "ai_model", None), key=key)
+    except Exception as e:
+        output.note(f"[yellow]MITM AI summary unavailable:[/] {e}")
+        return
+    output.print_ai_summary(text)
 
 
 def cmd_flows(args) -> None:
@@ -412,6 +501,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true", help="emit JSON instead of a table")
     s.add_argument("--db", default=store.DEFAULT_DB, help="SQLite inventory path")
     s.add_argument("--no-store", action="store_true", help="do not persist results")
+    s.add_argument("--no-ai-summary", action="store_true",
+                   help="skip the AI network summary after the scan")
+    s.add_argument("--ai-key", help="Anthropic API key for the AI summary (else $ANTHROPIC_API_KEY)")
+    s.add_argument("--ai-model", help="AI model id for the summary (default: claude-sonnet-5)")
+    s.add_argument("--nvd-key", help="NVD API key to enrich the summary with live CVEs (with --banners)")
     s.set_defaults(func=cmd_scan)
 
     h = sub.add_parser("hosts", help="list the accumulated asset inventory")
@@ -464,6 +558,15 @@ def build_parser() -> argparse.ArgumentParser:
     mi.add_argument("--gateway", help="gateway IP (default: from the selected interface)")
     mi.add_argument("--iface", help="interface name or IP (default: auto)")
     mi.add_argument("--db", default=store.DEFAULT_DB)
+    mi.add_argument("--dns-spoof", action="append", metavar="DOMAIN=IP",
+                    help="spoof DNS: redirect DOMAIN (or *.dom / *) to IP — authorized testing only "
+                         "(repeatable)")
+    mi.add_argument("--spoof-all", metavar="IP",
+                    help="spoof ALL DNS queries to IP (catch-all) — authorized testing only")
+    mi.add_argument("--no-ai-summary", action="store_true",
+                    help="skip the AI summary of the captured traffic when MITM stops")
+    mi.add_argument("--ai-key", help="Anthropic API key for the MITM summary (else $ANTHROPIC_API_KEY)")
+    mi.add_argument("--ai-model", help="AI model id for the summary (default: claude-sonnet-5)")
     mi.set_defaults(func=cmd_mitm)
 
     fl = sub.add_parser("flows", help="show captured traffic flows (top talkers)")

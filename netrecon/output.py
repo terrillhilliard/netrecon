@@ -147,5 +147,18 @@ def print_alerts(rows: List[dict]) -> None:
                   f"{r.get('signature','')}  {r.get('src','')} -> {r.get('dst','')}")
 
 
+def print_ai_summary(text: str) -> None:
+    """Render the AI network summary in a titled panel (plain fallback)."""
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+
+        Console().print(Panel(text, title="[bold magenta]✦ AI NETWORK SUMMARY[/]",
+                              border_style="magenta", padding=(1, 2)))
+    except ImportError:
+        line = "=" * 60
+        print(f"\n{line}\n  AI NETWORK SUMMARY\n{line}\n{text}\n{line}")
+
+
 def to_json(obj) -> str:
     return json.dumps(obj, indent=2)

@@ -49,12 +49,20 @@ class State:
         self.events: List[dict] = []
         self.started_at = time.time()
         self.mitm = None  # active MitmSession, if any
+        self.mitm_target = ""
+        self.mitm_event_start = None  # index into events when the current MITM began
         self.ai_key = None
         self.ai_model = None
         self.db_path = None
         self.vt_key = None
         self.ha_key = None
         self.nvd_key = None
+        # AI summaries (network = auto on change; mitm = on stop)
+        self.network_summary = ""
+        self.network_summary_at = ""
+        self.network_sig = None
+        self.mitm_summary = ""
+        self.mitm_summary_at = ""
 
     def session(self) -> dict:
         with self.lock:
@@ -127,10 +135,90 @@ def scan_once(state: State, target: str, ports, timeout: float, db_path: str,
         con.close()
 
 
+def _host_sig(hosts: List[dict]):
+    """A cheap fingerprint of the inventory so we only re-summarize on real change."""
+    return tuple(sorted(
+        (h.get("ipv4", ""),
+         tuple(sorted(((h.get("meta", {}) or {}).get("values", {}) or {}).get("ports", {}).keys())))
+        for h in hosts
+    ))
+
+
+def refresh_network_summary(state: State, force: bool = False) -> None:
+    """(Re)generate the AI network summary when the inventory changes (needs a key)."""
+    from . import ai, nvd
+
+    key = state.ai_key or ai.api_key()
+    if not key:
+        return
+    with state.lock:
+        hosts = list(state.hosts)
+        events = list(state.events)
+    sig = _host_sig(hosts)
+    if not force and sig == state.network_sig:
+        return
+    if not hosts:
+        return
+    ctx = ai.build_context(state.session(), events)
+    try:
+        cve = nvd.context_block(hosts, key=state.nvd_key)
+        if cve:
+            ctx += ("\n\nLIVE NVD CVE DATA (current, from services.nvd.nist.gov) — "
+                    "use these real CVEs:\n" + cve)
+    except Exception:
+        pass
+    try:
+        text = ai.summarize(ctx, model=state.ai_model, key=key)
+    except Exception as e:
+        state.add_event("sys.log", {"message": f"AI network summary failed: {e}"})
+        return
+    with state.lock:
+        state.network_summary = text
+        state.network_summary_at = _iso(time.time())
+        state.network_sig = sig
+    state.add_event("ai.summary", {"hostname": "network summary updated"})
+
+
+def summarize_mitm_session(state: State) -> None:
+    """Summarize the just-ended MITM capture from the events collected since it started."""
+    from collections import Counter
+
+    from . import ai
+
+    target = state.mitm_target or ""
+    with state.lock:
+        start = state.mitm_event_start if state.mitm_event_start is not None else 0
+        evs = state.events[start:]
+        traffic = dict(state.traffic)
+    dns = Counter(e["data"].get("hostname", "") for e in evs
+                  if e.get("tag") == "dns" and e["data"].get("hostname"))
+    http = Counter(e["data"].get("hostname", "") for e in evs
+                   if e.get("tag") == "http" and e["data"].get("hostname"))
+    tlines = [f"{peer}: sent {t.get('sent', 0)} B, received {t.get('received', 0)} B"
+              for peer, t in sorted(traffic.items(),
+                                    key=lambda kv: kv[1].get("sent", 0) + kv[1].get("received", 0),
+                                    reverse=True)]
+    ctx = ai.build_mitm_context(target, dns_hits=dns.most_common(),
+                                http_hits=http.most_common(), traffic_lines=tlines)
+    key = state.ai_key or ai.api_key()
+    if not key:
+        text = ("AI summary unavailable (no ANTHROPIC_API_KEY). Raw capture:\n\n" + ctx)
+    else:
+        try:
+            text = ai.summarize_mitm(ctx, model=state.ai_model, key=key)
+        except Exception as e:
+            text = f"AI summary failed ({e}). Raw capture:\n\n{ctx}"
+    with state.lock:
+        state.mitm_summary = text
+        state.mitm_summary_at = _iso(time.time())
+    state.add_event("ai.summary", {"hostname": f"MITM summary ready for {target or 'target'}"})
+
+
 def _scanner_loop(state, target, ports, timeout, db_path, interval, stop):
     while not stop.is_set():
         try:
             scan_once(state, target, ports, timeout, db_path)
+            refresh_network_summary(state)
         except Exception as e:  # keep the server alive
             state.add_event("sys.log", {"message": f"scan error: {e}"})
         stop.wait(interval)
@@ -161,8 +249,12 @@ def _monitor_loop(state, iface_ip, stop):
         state.add_event("sys.log", {"message": f"monitor unavailable ({e}) - run as Administrator"})
 
 
-def start_mitm(state: State, target: str) -> dict:
-    """Launch an ARP-spoof MITM against `target`, feeding capture into state."""
+def start_mitm(state: State, target: str, dns_spoof: Optional[dict] = None) -> dict:
+    """Launch an ARP-spoof MITM against `target`, feeding capture into state.
+
+    `dns_spoof` (optional) is a {domain-pattern: redirect-ip} map for DNS spoofing —
+    authorized testing only.
+    """
     if not target:
         return {"success": False, "error": "no target specified"}
     if state.mitm is not None:
@@ -191,9 +283,13 @@ def start_mitm(state: State, target: str) -> dict:
     def on_http(client, host):
         state.add_event("http", {"ipv4": client, "hostname": host})
 
+    def on_spoof(client, qname, spoof_ip):
+        state.add_event("dns.spoof", {"ipv4": client, "hostname": f"{qname} -> {spoof_ip}"})
+
     try:
         sess = mitm_mod.MitmSession(target, gw, iface_ip=state.interface.get("ipv4"),
-                                    on_flow=on_flow, on_dns=on_dns, on_http=on_http)
+                                    on_flow=on_flow, on_dns=on_dns, on_http=on_http,
+                                    dns_spoof=dns_spoof or {}, on_spoof=on_spoof)
         sess.start()
     except ImportError:
         return {"success": False, "error": "scapy not installed (pip install scapy)"}
@@ -203,8 +299,18 @@ def start_mitm(state: State, target: str) -> dict:
         return {"success": False, "error": str(e)}
 
     state.mitm = sess
-    state.add_event("sys.log", {"message": f"MITM started on {target}"})
-    return {"success": True, "note": f"MITM {target} started - see the TRAFFIC view"}
+    with state.lock:
+        state.mitm_target = target
+        state.mitm_event_start = len(state.events)
+        state.mitm_summary = ""
+        state.mitm_summary_at = ""
+    spoof_note = ""
+    if dns_spoof:
+        rules = ", ".join(f"{d}->{ip}" for d, ip in dns_spoof.items())
+        spoof_note = f" | DNS spoof: {rules}"
+    state.add_event("sys.log", {"message": f"MITM started on {target}{spoof_note}"})
+    return {"success": True,
+            "note": f"MITM {target} started (authorized testing only) - see the TRAFFIC view"}
 
 
 def stop_mitm(state: State) -> dict:
@@ -215,7 +321,11 @@ def stop_mitm(state: State) -> dict:
             pass
         state.mitm = None
         state.add_event("sys.log", {"message": "MITM stopped, ARP restored"})
-    return {"success": True}
+        try:
+            summarize_mitm_session(state)
+        except Exception as e:
+            state.add_event("sys.log", {"message": f"MITM summary error: {e}"})
+    return {"success": True, "summary": state.mitm_summary, "summary_at": state.mitm_summary_at}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -267,6 +377,17 @@ class Handler(BaseHTTPRequestHandler):
             with self.state.lock:
                 self._json(list(self.state.events))
             return
+        if path == "/api/summary":
+            with self.state.lock:
+                self._json({
+                    "network": self.state.network_summary,
+                    "network_at": self.state.network_summary_at,
+                    "mitm": self.state.mitm_summary,
+                    "mitm_at": self.state.mitm_summary_at,
+                    "mitm_target": self.state.mitm_target,
+                    "mitm_active": self.state.mitm is not None,
+                })
+            return
         if path == "/api/alerts":
             try:
                 con = store.connect(self.state.db_path or store.DEFAULT_DB)
@@ -291,10 +412,16 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(body or b"{}")
             except json.JSONDecodeError:
                 data = {}
-            self._json(start_mitm(self.state, data.get("target")))
+            spoof = data.get("spoof") if isinstance(data.get("spoof"), dict) else None
+            self._json(start_mitm(self.state, data.get("target"), dns_spoof=spoof))
             return
         if path == "/api/mitm/stop":
             self._json(stop_mitm(self.state))
+            return
+        if path == "/api/summary":
+            threading.Thread(target=lambda: refresh_network_summary(self.state, force=True),
+                             daemon=True).start()
+            self._json({"success": True, "note": "regenerating network summary"})
             return
         if path == "/api/intel":
             try:

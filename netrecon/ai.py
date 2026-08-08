@@ -77,6 +77,105 @@ def build_context(session: dict, events: Optional[list] = None) -> str:
     return "\n".join(lines)
 
 
+SUMMARY_REQUEST = (
+    "Produce a full situational SECURITY REPORT of this network for the operator — no question was "
+    "asked, just brief them. Cover, most-important first:\n"
+    "1. OVERVIEW — the subnet, host count, and the gateway/router (what it appears to be).\n"
+    "2. NOTABLE HOSTS — servers, IoT/cameras, and anything exposing services; name the IP + ports.\n"
+    "3. MAJOR VULNERABILITIES — for each risky/exposed service or likely-vulnerable version, give a "
+    "finding with these fields:\n"
+    "     • Host/service — the IP, port, and detected version.\n"
+    "     • CVE(s) — the known CVE IDs with CVSS severity/score (prefer the LIVE NVD block when "
+    "present; mark ⚔ if in CISA KEV / actively exploited).\n"
+    "     • Real-world attacks — name concrete, proven exploitation: the malware/worm/ransomware/APT "
+    "campaign or public incident that used it (e.g. a specific botnet, Metasploit module, or Exploit-DB "
+    "PoC). Do NOT provide weaponized exploit code.\n"
+    "     • Fix / mitigation — the exact remediation: upgrade to >= version X, apply patch, disable the "
+    "service, restrict by firewall/segmentation, or change the vulnerable config.\n"
+    "   Rank findings by exploitability and impact (Critical/High/Medium/Low).\n"
+    "4. OTHER RISKS — rogue/unexpected devices, weak/legacy protocols, default-credential exposure.\n"
+    "5. NEXT STEPS — 2-4 concrete netrecon commands to dig deeper.\n"
+    "Plain text, no markdown headers. Be specific and cite real CVE IDs and real attack names — never "
+    "invent them; if you are not confident a CVE or attack is real, say so. If data is too thin, say so."
+)
+
+
+def context_from_scan(hosts: list, interface: Optional[dict] = None,
+                      gateway: str = "") -> str:
+    """Build an AI context string from CLI-shape host dicts (recon.gather output).
+
+    Each host: {ip, mac, vendor, hostname, ports:[{port, service, banner}]}.
+    Mirrors build_context() so serve and the CLI produce comparable summaries.
+    """
+    lines = []
+    if interface:
+        lines.append(f"Interface: {interface.get('ipv4', '?')} ({interface.get('name', '')})")
+    if gateway:
+        lines.append(f"Gateway: {gateway}")
+    lines.append(f"{len(hosts)} hosts discovered:")
+    for h in hosts[:50]:
+        pstrs = []
+        for p in h.get("ports", []) or []:
+            s = f"{p.get('port')}/{p.get('service', '') or 'tcp'}"
+            if p.get("banner"):
+                s += f" [{p['banner']}]"
+            pstrs.append(s)
+        lines.append(f"  - {h.get('ip', '')}  {h.get('hostname', '') or '-'}  "
+                     f"[{h.get('vendor', '') or 'unknown'}]  ports: {', '.join(pstrs) or 'none'}")
+    return "\n".join(lines)
+
+
+def summarize(context: str, model: Optional[str] = None,
+              key: Optional[str] = None, max_tokens: int = 900) -> str:
+    """Ask Claude for a full network summary given a prebuilt context string."""
+    return ask(SUMMARY_REQUEST, context, model=model, key=key, max_tokens=max_tokens)
+
+
+MITM_SUMMARY_REQUEST = (
+    "An ARP-spoof MITM session against a single target device just ended. Using the captured "
+    "DNS lookups, HTTP hosts, and traffic below, brief the operator on what that device was doing "
+    "— most-important first:\n"
+    "1. WHAT THE DEVICE IS — infer the device type / OS / apps from the domains and services it "
+    "contacted.\n"
+    "2. DESTINATIONS — the notable domains/hosts it talked to and what they are (cloud, CDN, "
+    "telemetry, ads/trackers, or unexpected/suspicious).\n"
+    "3. FLAGS — anything sensitive or risky: cleartext HTTP, login/credential endpoints, unusual "
+    "destinations, or possible malware/C2 beaconing.\n"
+    "4. NEXT STEPS — what to investigate next.\n"
+    "Keep it tight — a few short paragraphs or bullets. Plain text, no markdown headers. "
+    "If the capture was thin, say so plainly."
+)
+
+
+def build_mitm_context(target: str, dns_hits: Optional[list] = None,
+                       http_hits: Optional[list] = None,
+                       traffic_lines: Optional[list] = None, note: str = "") -> str:
+    """Context for a MITM summary. dns_hits/http_hits are [(name, count)] lists."""
+    lines = [f"MITM target device: {target}"]
+    if note:
+        lines.append(note)
+    if dns_hits:
+        lines.append(f"\nDNS lookups ({len(dns_hits)} distinct):")
+        for name, hits in dns_hits[:40]:
+            lines.append(f"  {name}  x{hits}")
+    if http_hits:
+        lines.append(f"\nHTTP hosts ({len(http_hits)} distinct):")
+        for name, hits in http_hits[:40]:
+            lines.append(f"  {name}  x{hits}")
+    if traffic_lines:
+        lines.append("\nTraffic (by peer):")
+        lines.extend(f"  {t}" for t in traffic_lines[:25])
+    if not (dns_hits or http_hits or traffic_lines):
+        lines.append("(no DNS, HTTP, or traffic was captured during the session)")
+    return "\n".join(lines)
+
+
+def summarize_mitm(context: str, model: Optional[str] = None,
+                   key: Optional[str] = None, max_tokens: int = 900) -> str:
+    """Ask Claude to summarize a finished MITM session's captured event stream."""
+    return ask(MITM_SUMMARY_REQUEST, context, model=model, key=key, max_tokens=max_tokens)
+
+
 def ask(question: str, context: str, model: Optional[str] = None,
         key: Optional[str] = None, max_tokens: int = 1024) -> str:
     key = key or api_key()

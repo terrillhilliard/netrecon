@@ -310,6 +310,14 @@
   .intellinks{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
   .intellinks a{padding:8px 14px;border:1px solid var(--neon);color:var(--neon);border-radius:8px;text-decoration:none;font-size:12px;letter-spacing:1px}
   .intellinks a:hover{background:var(--neon);color:var(--bg)}
+  /* AI REPORT / SUMMARY */
+  #view-summary{grid-template-columns:1fr;grid-template-rows:1fr}
+  .sumbody{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+  .sumcard{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel2)}
+  .sumhead{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:2px;color:var(--neon2);margin-bottom:12px}
+  .sumwhen{margin-left:auto;color:var(--dim);font-size:10px;letter-spacing:1px}
+  .sumtext{font-size:13px;line-height:1.6;color:var(--txt);white-space:pre-wrap;word-break:break-word}
+  .sumtext .aihint{white-space:normal;color:var(--dim)}
   /* ============================ LIQUID GLASS ============================ */
   :root,:root[data-theme="dark"]{ --glass:rgba(10,18,27,.5); --glass-brd:rgba(255,255,255,.10); --glass-hi:rgba(255,255,255,.07); }
   :root[data-theme="light"]{ --glass:rgba(255,255,255,.55); --glass-brd:rgba(10,60,50,.14); --glass-hi:rgba(255,255,255,.75); }
@@ -388,7 +396,7 @@
       <button class="navb" data-view="traffic">≈ TRAFFIC</button>
       <button class="navb" data-view="scanner">⌗ NMAP SCAN</button>
       <button class="navb" data-view="ai">✦ AI ANALYSIS</button>
-      <button class="navb" data-view="intel">☣ THREAT INTEL</button>
+      <button class="navb" data-view="summary">▤ AI REPORT</button>
       <div style="flex:1"></div>
       <button class="navb about" id="aboutBtn">ⓘ ABOUT PROJECT</button>
     </nav>
@@ -516,18 +524,21 @@
         </div>
       </section>
 
-      <!-- ===== THREAT INTEL ===== -->
-      <section class="view" id="view-intel">
+      <!-- ===== AI REPORT / SUMMARY ===== -->
+      <section class="view" id="view-summary">
         <div class="panel">
-          <div class="ph plain">☣ THREAT INTEL — VirusTotal · ANY.RUN · Hybrid Analysis</div>
-          <div class="intelbody">
-            <div class="intelbar">
-              <input id="intelQ" placeholder="paste an IP · domain · URL · file hash …" spellcheck="false" autocomplete="off">
-              <button class="sbtn" id="intelGo">☣ LOOKUP</button>
-              <label class="inteldrop" id="intelDrop" for="intelFile">⬆ drop / pick a file</label>
-              <input type="file" id="intelFile" style="display:none">
+          <div class="ph plain">▤ AI REPORT — NETWORK SUMMARY &amp; MITM RESULTS
+            <button class="sbtn" id="sumRefresh" style="margin-left:auto">↻ REGENERATE</button>
+          </div>
+          <div class="sumbody" id="sumBody">
+            <div class="sumcard" id="sumNet">
+              <div class="sumhead">✦ NETWORK SUMMARY <span class="sumwhen" id="sumNetWhen"></span></div>
+              <div class="sumtext" id="sumNetText"><div class="aihint">The AI writes a full security report after each scan — major vulnerabilities, known CVEs, real-world attack examples, and how to patch or mitigate them. Launch <b>netrecon serve</b> with an <b>ANTHROPIC_API_KEY</b> to enable it.</div></div>
             </div>
-            <div class="intelresult" id="intelResult"><div class="aihint">Check any indicator against <b>VirusTotal</b>, <b>ANY.RUN</b> &amp; <b>Hybrid Analysis</b>. Files are hashed in your browser — only the SHA-256 is sent. Set <b>VT_API_KEY</b> / <b>HYBRID_ANALYSIS_KEY</b> (or <code>serve --vt-key</code>) for inline verdicts.</div></div>
+            <div class="sumcard" id="sumMitm">
+              <div class="sumhead">⚡ MITM RESULTS <span class="sumwhen" id="sumMitmWhen"></span></div>
+              <div class="sumtext" id="sumMitmText"><div class="aihint">Run a MITM on a device (HOSTS → drill-down → MITM), then stop it. When it stops, the captured DNS/HTTP/traffic is summarized here — what the device was doing, notable destinations, and anything risky. <b>Authorized, ethical testing only.</b></div></div>
+            </div>
           </div>
         </div>
       </section>
@@ -691,6 +702,7 @@ async function poll(){
     renderTraffic(st.sent,st.received,st.pkts_received,(s.packets&&s.packets.protos)||{});
     renderTop(); renderAll();
     try{renderEvents(await api("/api/events")||[]);}catch(_){}
+    if(activeView==="summary")loadSummary();
   }catch(e){online=false;setConn(false);}
 }
 function setConn(up){$("#conDot").className="dot"+(up?" live":"");$("#conTxt").textContent=up?"LINK ACTIVE":"OFFLINE";
@@ -1197,7 +1209,7 @@ function showView(v){
   document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="view-"+v));
   document.querySelectorAll(".navb").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
   activeView=v;
-  requestAnimationFrame(()=>{ resize(); if(v==="hosts")drawChannels(); if(v==="traffic")drawRate(); });
+  requestAnimationFrame(()=>{ resize(); if(v==="hosts")drawChannels(); if(v==="traffic")drawRate(); if(v==="summary")loadSummary(); });
 }
 document.querySelectorAll(".navb[data-view]").forEach(b=>b.onclick=()=>{ b.dataset.view==="scanner"?openScan():showView(b.dataset.view); });
 
@@ -1226,56 +1238,31 @@ async function aiAsk(){
 if($("#aiSend")){ $("#aiSend").onclick=aiAsk; $("#aiQ").addEventListener("keydown",e=>{if(e.key==="Enter")aiAsk();});
   aiAppend("a",'<b>✦ netrecon AI analyst.</b> Ask about the devices, ports, and traffic I\'ve found — e.g. <i>"which hosts are risky?"</i>, <i>"what is 192.168.1.20?"</i>, <i>"any signs of a rogue device?"</i>'); }
 
-// ================= THREAT INTEL =================
-async function sha256File(file){
-  const buf=await file.arrayBuffer();
-  const h=await crypto.subtle.digest("SHA-256",buf);
-  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,"0")).join("");
+// ================= AI REPORT / SUMMARY =================
+function renderSummary(d){
+  d=d||{};
+  if(d.network){ $("#sumNetText").textContent=d.network; }
+  $("#sumNetWhen").textContent=d.network_at?("updated "+ago(d.network_at)+" ago"):"";
+  if(d.mitm){ $("#sumMitmText").textContent=d.mitm; }
+  $("#sumMitmWhen").textContent=d.mitm_at?((d.mitm_target?esc(d.mitm_target)+" · ":"")+ago(d.mitm_at)+" ago"):"";
 }
-function intelStatBar(st){
-  if(!st)return"";
-  const mal=st.malicious||0,sus=st.suspicious||0,harm=st.harmless||0,und=st.undetected||0,total=mal+sus+harm+und;
-  const v=mal>0?`<span style="color:var(--red)">⚠ ${mal} engines flag this MALICIOUS</span>`
-    :sus>0?`<span style="color:var(--amber)">${sus} suspicious</span>`:`<span style="color:var(--neon)">✓ clean</span>`;
-  return `<div class="intelverdict">${v}</div><div class="muted">VirusTotal: malicious ${mal} · suspicious ${sus} · harmless ${harm} · undetected ${und} (of ${total})</div>`;
+function renderDemoSummary(){
+  $("#sumNetText").textContent="Demo mode. On a live 'netrecon serve' the AI writes a full security report here after each scan: an overview of the subnet and gateway, the notable hosts, then a ranked list of MAJOR VULNERABILITIES — each with the affected host / port / version, the known CVE IDs (CVSS severity, ⚔ if actively exploited in CISA KEV), real-world proven attacks that used them, and the exact fix or mitigation. Launch netrecon serve with an ANTHROPIC_API_KEY to enable it.";
+  $("#sumNetWhen").textContent="demo";
+  $("#sumMitmText").textContent="Demo mode. After you MITM a device and stop it, the captured DNS lookups, HTTP hosts and traffic are summarized here — what the device is, the notable destinations it contacted, anything risky (cleartext logins, trackers, suspicious hosts), and what to check next. Authorized, ethical testing only.";
+  $("#sumMitmWhen").textContent="demo";
 }
-function renderIntel(d){
-  const box=$("#intelResult");
-  if(d.error){box.innerHTML=`<div class="aimsg err">${esc(d.error)}</div>`;return;}
-  const L=d.links||{}; let vt="",ha="";
-  if(d.virustotal){ if(d.virustotal.error)vt=`<div class="muted">VirusTotal: ${esc(d.virustotal.error)}</div>`;
-    else if(d.virustotal.stats)vt=intelStatBar(d.virustotal.stats)+(d.virustotal.name?`<div class="muted">${esc(d.virustotal.name)}</div>`:"");
-    else vt=`<div class="muted">VirusTotal: ${esc(d.virustotal.note||"no data")}</div>`; }
-  if(d.hybrid){ if(d.hybrid.error)ha=`<div class="muted">Hybrid Analysis: ${esc(d.hybrid.error)}</div>`;
-    else if(d.hybrid.verdict)ha=`<div class="intelverdict">Hybrid Analysis: <b>${esc(d.hybrid.verdict)}</b>${d.hybrid.threat_score!=null?` (score ${esc(d.hybrid.threat_score)})`:""}</div>`;
-    else ha=`<div class="muted">Hybrid Analysis: ${esc(d.hybrid.note||"no data")}</div>`; }
-  box.innerHTML=`<div class="intelcard">
-    <div class="intelhead"><span class="intelkind">${esc(d.kind)}</span><span class="intelind">${esc(d.indicator)}</span></div>
-    ${vt}${ha}
-    <div class="intellinks">
-      <a href="${esc(L.virustotal||"#")}" target="_blank" rel="noopener">VirusTotal ↗</a>
-      <a href="${esc(L.anyrun||"#")}" target="_blank" rel="noopener">ANY.RUN ↗</a>
-      <a href="${esc(L.hybrid||"#")}" target="_blank" rel="noopener">Hybrid Analysis ↗</a>
-    </div></div>`;
+async function loadSummary(){
+  if(DEMO){ renderDemoSummary(); return; }
+  try{ renderSummary(await api("/api/summary")); }catch(e){}
 }
-async function intelLookup(indicator){
-  const box=$("#intelResult"); box.innerHTML=`<div class="aimsg think">looking up <b>${esc(indicator)}</b> …</div>`;
-  if(DEMO){ const q=encodeURIComponent(indicator);
-    renderIntel({indicator,kind:"indicator",links:{virustotal:"https://www.virustotal.com/gui/search/"+q,anyrun:"https://app.any.run/submissions",hybrid:"https://www.hybrid-analysis.com/search?query="+q},virustotal:{note:"demo — run 'netrecon serve --vt-key <key>' for live verdicts"}}); return; }
-  try{ const r=await fetch(cfg.base+"/api/intel",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({indicator})}); renderIntel(await r.json()); }
-  catch(e){ box.innerHTML=`<div class="aimsg err">request failed: ${esc(e.message)}</div>`; }
+async function regenSummary(){
+  if(DEMO){ renderDemoSummary(); return; }
+  const net=$("#sumNetText"); if(net) net.innerHTML='<div class="aihint">generating report …</div>';
+  try{ await fetch(cfg.base+"/api/summary",{method:"POST"}); }catch(e){}
+  setTimeout(loadSummary,4000);
 }
-if($("#intelGo")){
-  const go=()=>{const q=$("#intelQ").value.trim();if(q)intelLookup(q);};
-  $("#intelGo").onclick=go;
-  $("#intelQ").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
-  async function fileToHash(f){ if(!f)return; $("#intelQ").value="hashing "+f.name+" …";
-    try{const h=await sha256File(f); $("#intelQ").value=h; intelLookup(h);}catch(_){$("#intelResult").innerHTML='<div class="aimsg err">hashing needs a secure context (localhost/https)</div>';} }
-  $("#intelFile").addEventListener("change",e=>fileToHash(e.target.files[0]));
-  const dropZone=$("#view-intel");
-  ["dragover","drop"].forEach(ev=>dropZone.addEventListener(ev,e=>e.preventDefault()));
-  dropZone.addEventListener("drop",e=>fileToHash(e.dataTransfer.files[0]));
-}
+if($("#sumRefresh")){ $("#sumRefresh").onclick=regenSummary; }
 
 // boot
 if(DEMO)$("#rlabel").textContent="DEMO MODE — synthetic data";

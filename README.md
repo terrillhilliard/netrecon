@@ -9,11 +9,16 @@
 <p align="center"><img src="assets/demo.gif" alt="netrecon demo: scan + live CVE lookup" width="760"></p>
 
 `netrecon` discovers hosts, scans ports and service versions, watches for new
-devices and ARP-spoof attacks, captures traffic, checks indicators against
-threat-intel feeds, looks up live CVEs, and serves a **liquid-glass web
-dashboard with an AI analyst** — all backed by a local SQLite asset inventory.
+devices and ARP-spoof attacks, captures traffic, looks up live CVEs, and writes a
+**full AI security report after every scan** — major vulnerabilities, known CVEs,
+real-world attack examples, and how to patch or mitigate — all served in a
+**liquid-glass web console** and backed by a local SQLite asset inventory.
 The core needs **no admin, no Npcap, no third-party packages**; optional extras
 (`rich`, `scapy`, `mac-vendor-lookup`) unlock nicer output, MITM, and vendor names.
+
+> **For authorized, ethical security testing only** — run it on networks you own
+> or have explicit permission to assess. The offensive modules (ARP-spoof MITM,
+> DNS spoofing) are active attacks and are gated behind clear warnings.
 
 > Built by **Terrill Hilliard** — IT Support & Security Operations · M.S. Cybersecurity · CySA+ / PenTest+.
 > **Live demo:** https://recon-console-theta.vercel.app
@@ -25,13 +30,13 @@ The core needs **no admin, no Npcap, no third-party packages**; optional extras
 | Command | What it does |
 |---|---|
 | `netrecon gui` | Point-and-click launcher window (buttons for everything) |
-| `netrecon scan` | Discover hosts → async TCP port scan → vendor / hostname / **service-version** enrichment |
+| `netrecon scan` | Discover hosts → async TCP port scan → enrichment → **AI security report** (`--no-ai-summary` to skip) |
 | `netrecon serve` | **Web console** on the netrecon engine (dashboard + REST API) |
 | `netrecon hosts` | The accumulated SQLite asset inventory |
 | `netrecon watch` | Continuous rescan; alert on new devices (`--ntfy` for phone push) |
 | `netrecon arpwatch` | **Detect ARP-spoofing / MITM** — passive, no admin, works on Wi-Fi |
 | `netrecon monitor` | Passive flow + DNS capture (raw socket; admin) |
-| `netrecon mitm <ip>` | ARP-spoof MITM + traffic capture (Scapy; admin; **wired Ethernet**) |
+| `netrecon mitm <ip>` | ARP-spoof MITM + capture + **DNS spoofing** (`--dns-spoof`) + AI summary on stop (Scapy; admin; **wired Ethernet**) |
 | `netrecon flows` / `dns` | View captured traffic / DNS queries |
 | `netrecon vulns [svc]` | **Live CVE lookup (NIST NVD)** for a service or the whole inventory |
 | `netrecon ingest` / `alerts` | Pull Suricata/Zeek logs into the store & query IDS alerts |
@@ -50,8 +55,9 @@ real data:
 - **Traffic** — router-link telemetry, live bytes/sec, captured DNS/HTTP
 - **AI Analysis** — chat that answers questions about your network and hunts
   **vulnerabilities/exploits**, grounded in **live NVD CVE data** for detected versions
-- **Threat Intel** — check an IP / domain / URL / dropped file (hashed locally)
-  against **VirusTotal + Hybrid Analysis** with pivot links to ANY.RUN
+- **AI Report** — a full security report auto-written after each scan (major
+  vulnerabilities, **CVE IDs + CVSS**, real-world attack examples, and the exact
+  fix/mitigation) plus a **MITM results** summary of what an intercepted device did
 - **ARP-spoof banner** — a red alert across the top the moment a MITM is detected
 
 ## Requirements
@@ -75,9 +81,7 @@ stdlib only, no extra packages:
 
 | Env var | Unlocks |
 |---|---|
-| `ANTHROPIC_API_KEY` | AI Analysis tab |
-| `VT_API_KEY` | VirusTotal in Threat Intel |
-| `HYBRID_ANALYSIS_KEY` | Hybrid Analysis in Threat Intel |
+| `ANTHROPIC_API_KEY` | AI Analysis chat + the AI Report (scan & MITM summaries) |
 | `NVD_API_KEY` | higher rate limit for live CVE lookups |
 
 Python dependencies are pinned in [`requirements.txt`](requirements.txt) and
@@ -96,20 +100,24 @@ pip install -e .                 # installs rich, mac-vendor-lookup, scapy
 
 **Packet driver (for `mitm` / `monitor` capture):** [Npcap](https://npcap.com) on
 Windows, or `libpcap` on Linux/macOS. Everything else — scan, serve, watch,
-arpwatch, threat intel, CVE lookups — needs no driver and no admin.
+arpwatch, CVE lookups — needs no driver and no admin.
 
-**Optional API keys** (env vars or `serve --*-key`): `ANTHROPIC_API_KEY` (AI tab),
-`VT_API_KEY` / `HYBRID_ANALYSIS_KEY` (Threat Intel), `NVD_API_KEY` (raises the
-CVE lookup rate limit). All threat-intel/AI/CVE calls use only the stdlib.
+**Optional API keys** (env vars or `serve --*-key`): `ANTHROPIC_API_KEY` (AI chat +
+AI Report), `NVD_API_KEY` (raises the CVE lookup rate limit). All AI/CVE calls use
+only the stdlib.
 
 ## Usage
 
 ```bash
-netrecon scan --banners                     # hosts, ports + service versions
+netrecon scan --banners                     # hosts, ports, versions + AI security report
 netrecon serve                              # dashboard at http://127.0.0.1:8081
 netrecon arpwatch --ntfy my-lan             # get pinged if someone MITMs you
 netrecon vulns "OpenSSH 8.4"                 # live CVEs for a service
 netrecon watch --iface Wi-Fi                # keep scanning + alert on new devices
+
+# Authorized red-team primitives (admin + wired Ethernet; ETHICAL USE ONLY):
+netrecon mitm 192.168.1.50                  # ARP-spoof MITM + AI traffic summary on stop
+netrecon mitm 192.168.1.50 --dns-spoof login.example.com=192.168.1.9   # DNS spoof one domain
 ```
 
 ## Roadmap
@@ -120,6 +128,7 @@ netrecon watch --iface Wi-Fi                # keep scanning + alert on new devic
 | 0.5 | rebrand · MITM · AI analyst · liquid-glass UI | ✅ done |
 | 0.6 | GUI launcher · Threat Intel · service versions · CVE-aware AI | ✅ done |
 | 0.7 | ARP-spoof detector · mobile UI · **live NVD/CVE feed** | ✅ done |
+| 0.10 | **AI security report per scan** (CVEs + real attacks + fixes) · **DNS spoofing** · MITM AI summary | ✅ done |
 | next | anomaly scoring · exploit-availability enrichment | planned |
 
 ## Legal

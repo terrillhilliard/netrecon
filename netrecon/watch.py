@@ -19,11 +19,20 @@ def ntfy_url(topic_or_url: str) -> str:
     return topic_or_url if topic_or_url.startswith("http") else f"https://ntfy.sh/{topic_or_url}"
 
 
+ETHICAL_NOTICE = ("— netrecon: for authorized, ethical security testing on networks you own "
+                  "or have explicit permission to assess. Unauthorized use may be illegal.")
+
+
 def notify_ntfy(topic_or_url: str, title: str, message: str) -> bool:
-    """Push a notification via ntfy (topic name or full URL). No account needed."""
+    """Push a notification via ntfy (topic name or full URL). No account needed.
+
+    Every push carries an ethical-use notice so an alert can never be mistaken for
+    endorsement of unauthorized activity.
+    """
     url = ntfy_url(topic_or_url)
+    body = f"{message}\n\n{ETHICAL_NOTICE}"
     req = urllib.request.Request(
-        url, data=message.encode("utf-8"),
+        url, data=body.encode("utf-8"),
         headers={"Title": title, "Priority": "high", "Tags": "warning"},
     )
     try:

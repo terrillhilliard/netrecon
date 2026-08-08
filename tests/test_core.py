@@ -120,6 +120,33 @@ def test_mitm_http_host():
     assert mitm.http_host(b"not http") is None
 
 
+def test_spoof_match_exact_and_wildcard():
+    spoof = {"login.example.com": "10.0.0.5", "*.corp.local": "10.0.0.9"}
+    assert mitm.spoof_match("login.example.com", spoof) == "10.0.0.5"
+    assert mitm.spoof_match("LOGIN.example.com.", spoof) == "10.0.0.5"   # case + trailing dot
+    assert mitm.spoof_match("corp.local", spoof) == "10.0.0.9"          # base of *.corp.local
+    assert mitm.spoof_match("host.corp.local", spoof) == "10.0.0.9"     # subdomain
+    assert mitm.spoof_match("example.com", spoof) is None
+    assert mitm.spoof_match("anything.net", {}) is None
+
+
+def test_spoof_match_catch_all():
+    assert mitm.spoof_match("whatever.com", {"*": "10.0.0.1"}) == "10.0.0.1"
+
+
+def test_build_mitm_context_thin():
+    ctx = ai.build_mitm_context("192.168.0.50")
+    assert "192.168.0.50" in ctx and "no DNS" in ctx
+
+
+def test_context_from_scan():
+    hosts = [{"ip": "192.168.0.10", "mac": "aa", "vendor": "Acme", "hostname": "nas",
+              "ports": [{"port": 22, "service": "ssh", "banner": "OpenSSH 8.4"}]}]
+    ctx = ai.context_from_scan(hosts, interface={"ipv4": "192.168.0.2", "name": "eth0"},
+                               gateway="192.168.0.1")
+    assert "192.168.0.10" in ctx and "22/ssh" in ctx and "OpenSSH 8.4" in ctx
+
+
 def test_intel_classify():
     assert intel.classify("8.8.8.8") == "ip"
     assert intel.classify("evil.example.com") == "domain"
